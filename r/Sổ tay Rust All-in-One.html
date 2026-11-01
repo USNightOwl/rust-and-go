@@ -275,11 +275,12 @@ mark { background: var(--oxide-soft); color: inherit; border-radius: 3px; paddin
   .ring b { font-size: 28px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+.home-link{display:inline-flex;align-items:center;gap:4px;font:600 13px/1 system-ui,sans-serif;color:inherit;opacity:.7;text-decoration:none;padding:6px 10px;border:1px solid currentColor;border-radius:999px;white-space:nowrap;align-self:center}.home-link:hover{opacity:1}
 </style>
 
 <header class="topbar">
   <div class="topbar-inner">
-    <div class="brand"><h1>Rust <span>All-in-One</span></h1></div>
+    <div class="brand"><a class="home-link" href="../index.html" title="Về trang chủ">← Trang chủ</a><h1>Rust <span>All-in-One</span></h1></div>
     <div class="overall" aria-label="Tiến độ tổng">
       <div class="bar"><i id="ovBar"></i></div>
       <span class="pct" id="ovPct">0 / 0 mục · 0%</span>
