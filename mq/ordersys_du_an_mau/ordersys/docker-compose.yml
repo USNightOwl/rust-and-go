@@ -1,0 +1,49 @@
+# Môi trường dev đầy đủ: RabbitMQ + PostgreSQL + 3 service.
+# Chạy: docker compose up --build
+services:
+  rabbitmq:
+    image: rabbitmq:4.3-management
+    hostname: rabbit1
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+      RABBITMQ_DEFAULT_VHOST: p2b
+    ports: ["5672:5672", "15672:15672"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mq_p2b
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      retries: 20
+
+  order-service:
+    build: {context: ., args: {SERVICE: order-service}}
+    environment: &env
+      AMQP_URL: amqp://admin:admin@rabbitmq:5672/p2b
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/mq_p2b?sslmode=disable
+    ports: ["8080:8080"]
+    depends_on: &deps
+      rabbitmq: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+
+  inventory-worker:
+    build: {context: ., args: {SERVICE: inventory-worker}}
+    environment: *env
+    ports: ["8081:8081"]
+    depends_on: *deps
+
+  notification-worker:
+    build: {context: ., args: {SERVICE: notification-worker}}
+    environment: *env
+    ports: ["8082:8082"]
+    depends_on: *deps

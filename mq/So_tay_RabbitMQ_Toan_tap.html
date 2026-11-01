@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Sổ tay RabbitMQ Toàn tập</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: sổ học — thanh tiến độ trên cùng, mục lục trái, thẻ chương bên phải.
+   Nền lạnh · tím mận (accent, "message đang bay") · xanh lá (đã ack / hoàn thành). */
+:root {
+  --bg: #f0f1f6;
+  --surface: #ffffff;
+  --surface-2: #f6f8fa;
+  --ink: #17202a;
+  --ink-2: #4a5866;
+  --ink-3: #7b8794;
+  --line: #d7dde3;
+  --oxide: #6d3bb0;
+  --oxide-soft: #eee6f8;
+  --patina: #1d7a50;
+  --patina-soft: #dcf0e5;
+  --code-bg: #e9edf1;
+  --shadow: 0 1px 2px rgba(23, 32, 42, .06), 0 4px 16px rgba(23, 32, 42, .05);
+  --f-display: "Bricolage Grotesque", "Be Vietnam Pro", system-ui, sans-serif;
+  --f-body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121320; --surface: #1a1c2c; --surface-2: #202336; --ink: #dfe6ec;
+    --ink-2: #a8b4bf; --ink-3: #7c8893; --line: #2e3248; --oxide: #b48cf2;
+    --oxide-soft: #2b2140; --patina: #62c796; --patina-soft: #163225; --code-bg: #262a40;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121320; --surface: #1a1c2c; --surface-2: #202336; --ink: #dfe6ec;
+  --ink-2: #a8b4bf; --ink-3: #7c8893; --line: #2e3248; --oxide: #b48cf2;
+  --oxide-soft: #2b2140; --patina: #62c796; --patina-soft: #163225; --code-bg: #262a40;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 132px; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--f-body);
+  font-size: 15px; line-height: 1.6;
+}
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+  z-index: 30; background: var(--surface);
+}
+code {
+  font-family: var(--f-mono); font-size: .86em; background: var(--code-bg);
+  padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere;
+}
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--oxide); outline-offset: 2px; }
+
+/* ---------- Thanh trên cùng ---------- */
+.topbar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.topbar-inner {
+  max-width: 1280px; margin: 0 auto; padding-block: 12px 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; grid-template-columns: auto 1fr auto; gap: 8px 20px; align-items: center;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.brand h1 {
+  font-family: var(--f-display); font-weight: 800; font-size: 22px; letter-spacing: -.01em;
+  margin: 0; white-space: nowrap;
+}
+.brand h1 span { color: var(--oxide); }
+.overall { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.bar {
+  flex: 1; height: 8px; background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 99px; overflow: hidden; min-width: 60px;
+}
+.bar > i { display: block; height: 100%; width: 0; background: var(--patina); transition: width .3s; }
+.overall .pct {
+  font-family: var(--f-mono); font-size: 13px; color: var(--ink-2); white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.sync {
+  font-size: 12px; color: var(--ink-3); white-space: nowrap; display: flex; align-items: center; gap: 6px;
+}
+.sync::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+.sync[data-state="cloud"]::before { background: var(--patina); }
+.sync[data-state="saving"]::before { background: var(--oxide); }
+.controls {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+}
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.tab {
+  border: 1px solid var(--line); background: var(--surface); padding: 5px 12px;
+  border-radius: 99px; cursor: pointer; font-size: 13px; font-weight: 500;
+}
+.tab[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.search {
+  flex: 1 1 220px; min-width: 0; border: 1px solid var(--line); background: var(--surface-2);
+  border-radius: 99px; padding: 6px 14px; font: inherit; font-size: 14px; color: var(--ink);
+}
+.toggle { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--ink-2); cursor: pointer; }
+.toggle input { accent-color: var(--patina); }
+
+/* ---------- Khung chính ---------- */
+.wrap {
+  max-width: 1280px; margin: 0 auto; padding-block: 24px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 28px; align-items: start;
+}
+nav.toc {
+  position: sticky; top: calc(env(safe-area-inset-top, 0px) + 116px);
+  max-height: calc(100vh - 140px); overflow: auto; padding-right: 4px;
+}
+.toc h2 {
+  font-family: var(--f-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-3); margin: 18px 0 6px; font-weight: 600;
+}
+.toc h2:first-child { margin-top: 0; }
+.toc a {
+  display: grid; grid-template-columns: 26px 1fr 34px; gap: 6px; align-items: center;
+  padding: 4px 6px; border-radius: 6px; color: var(--ink-2); text-decoration: none; font-size: 13px;
+  line-height: 1.35;
+}
+.toc a:hover { background: var(--surface); color: var(--ink); }
+.toc a .n { font-family: var(--f-mono); font-size: 11px; color: var(--ink-3); }
+.toc a .p {
+  font-family: var(--f-mono); font-size: 11px; text-align: right; color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.toc a.full { color: var(--patina); }
+.toc a.full .p { color: var(--patina); }
+main { min-width: 0; display: grid; gap: 40px; }
+
+/* ---------- Tổng quan phần ---------- */
+.part-head {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 24px; align-items: end;
+  border-bottom: 2px solid var(--ink); padding-bottom: 12px;
+}
+.part-head .eyebrow {
+  font-family: var(--f-mono); font-size: 12px; letter-spacing: .14em; color: var(--oxide);
+  text-transform: uppercase; font-weight: 600;
+}
+.part-head h2 {
+  font-family: var(--f-display); font-weight: 800; font-size: clamp(24px, 3.2vw, 34px);
+  line-height: 1.1; margin: 4px 0 6px; text-wrap: balance; letter-spacing: -.015em;
+}
+.part-head p { margin: 0; color: var(--ink-2); max-width: 68ch; }
+.part-head .file { font-family: var(--f-mono); font-size: 12px; color: var(--ink-3); }
+.ring { text-align: right; }
+.ring b {
+  font-family: var(--f-display); font-size: 36px; font-weight: 800; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.ring small { display: block; font-size: 12px; color: var(--ink-3); font-family: var(--f-mono); }
+.milestones {
+  margin-top: 16px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px 16px;
+}
+.milestones h3 {
+  margin: 0 0 8px; font-size: 13px; font-family: var(--f-mono); letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-2); font-weight: 600;
+}
+.milestones ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.part-body { display: grid; gap: 18px; margin-top: 18px; }
+
+/* ---------- Thẻ chương ---------- */
+.ch {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); overflow: hidden;
+}
+.ch-head {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: start;
+  padding: 16px 18px 12px; cursor: pointer;
+}
+.ch-num {
+  font-family: var(--f-display); font-weight: 800; font-size: 28px; line-height: 1; color: var(--oxide);
+  min-width: 2ch; font-variant-numeric: tabular-nums;
+}
+.ch.done .ch-num { color: var(--patina); }
+.ch-head h3 { margin: 0; font-size: 18px; font-weight: 700; line-height: 1.3; text-wrap: balance; }
+.ch-head .intro { margin: 4px 0 0; color: var(--ink-2); font-size: 13.5px; line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ch.open .ch-head .intro { display: block; -webkit-line-clamp: unset; }
+.ch-meta { display: grid; justify-items: end; gap: 6px; }
+.pill {
+  font-family: var(--f-mono); font-size: 12px; padding: 2px 8px; border-radius: 99px;
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-2); white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.ch.done .pill { background: var(--patina-soft); border-color: transparent; color: var(--patina); }
+.ch.started:not(.done) .pill { background: var(--oxide-soft); border-color: transparent; color: var(--oxide); }
+.chev { width: 20px; height: 20px; color: var(--ink-3); transition: transform .2s; }
+.ch.open .chev { transform: rotate(180deg); }
+.mini { height: 3px; background: var(--surface-2); }
+.mini > i { display: block; height: 100%; width: 0; background: var(--patina); transition: width .3s; }
+.ch-body {
+  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 0;
+  border-top: 1px solid var(--line);
+}
+.col { padding: 16px 18px 18px; min-width: 0; }
+.col + .col { border-left: 1px solid var(--line); background: var(--surface-2); }
+.col h4 {
+  margin: 0 0 10px; font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-3); font-weight: 600;
+  display: flex; justify-content: space-between; gap: 8px;
+}
+.col h4 button {
+  border: 0; background: none; color: var(--oxide); cursor: pointer; font-size: 11.5px;
+  letter-spacing: .04em; text-transform: none; padding: 0;
+}
+.sum { margin: 0; padding-left: 18px; display: grid; gap: 7px; font-size: 14px; }
+.sum li::marker { color: var(--oxide); }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.item {
+  display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; align-items: start;
+  padding: 5px 6px; border-radius: 6px; cursor: pointer; font-size: 14px; line-height: 1.45;
+}
+.item:hover { background: var(--surface); }
+.item input {
+  appearance: none; width: 17px; height: 17px; margin: 2px 0 0; border: 1.5px solid var(--ink-3);
+  border-radius: 4px; display: grid; place-items: center; cursor: pointer; background: var(--surface);
+}
+.item input:checked { background: var(--patina); border-color: var(--patina); }
+.item input:checked::after {
+  content: ""; width: 9px; height: 5px; border: 2px solid #fff; border-top: 0; border-right: 0;
+  transform: translateY(-1px) rotate(-45deg);
+}
+.item .sn { font-family: var(--f-mono); font-size: 11.5px; color: var(--ink-3); margin-right: 6px; }
+.item input:checked + span { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--line); }
+.item .subs { display: block; font-size: 12.5px; color: var(--ink-3); margin-top: 1px; text-decoration: none; }
+details.ex { margin-top: 14px; border-top: 1px dashed var(--line); padding-top: 10px; }
+details.ex summary {
+  cursor: pointer; font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-2); font-weight: 600; list-style: none;
+}
+details.ex summary::-webkit-details-marker { display: none; }
+details.ex summary::before { content: "+ "; color: var(--oxide); }
+details.ex[open] summary::before { content: "- "; }
+details.ex .checks { margin-top: 8px; }
+mark { background: var(--oxide-soft); color: inherit; border-radius: 3px; padding: 0 1px; }
+.empty {
+  text-align: center; color: var(--ink-2); padding: 48px 16px; border: 1px dashed var(--line);
+  border-radius: var(--radius);
+}
+.foot {
+  display: flex; flex-wrap: wrap; gap: 10px 20px; justify-content: space-between; align-items: center;
+  color: var(--ink-3); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px;
+}
+.danger {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 99px; padding: 5px 12px;
+  cursor: pointer; font-size: 13px;
+}
+.confirm { display: inline-flex; gap: 8px; align-items: center; }
+.confirm .yes { border-color: var(--oxide); color: var(--oxide); }
+
+@media (max-width: 960px) {
+  .wrap { grid-template-columns: minmax(0, 1fr); }
+  nav.toc { display: none; }
+  .ch-body { grid-template-columns: minmax(0, 1fr); }
+  .col + .col { border-left: 0; border-top: 1px solid var(--line); }
+  html { scroll-padding-top: 150px; }
+}
+@media (max-width: 560px) {
+  .topbar-inner { grid-template-columns: minmax(0, 1fr) auto; }
+  .overall { grid-column: 1 / -1; grid-row: 2; }
+  .brand h1 { font-size: 19px; }
+  .ch-head { grid-template-columns: auto minmax(0, 1fr); }
+  .ch-meta { grid-column: 2; justify-items: start; grid-auto-flow: column; align-items: center; }
+  .ring b { font-size: 28px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+.home-link{display:inline-flex;align-items:center;gap:4px;font:600 13px/1 system-ui,sans-serif;color:inherit;opacity:.7;text-decoration:none;padding:6px 10px;border:1px solid currentColor;border-radius:999px;white-space:nowrap;align-self:center}.home-link:hover{opacity:1}
+</style>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand"><a class="home-link" href="../index.html" title="Về trang chủ">← Trang chủ</a><h1>RabbitMQ <span>Toàn tập</span></h1></div>
+    <div class="overall" aria-label="Tiến độ tổng">
+      <div class="bar"><i id="ovBar"></i></div>
+      <span class="pct" id="ovPct">0 / 0 mục · 0%</span>
+    </div>
+    <span class="sync" id="sync" data-state="local">Lưu trên trình duyệt này</span>
+    <div class="controls">
+      <div class="tabs" role="group" aria-label="Chọn phần">
+        <button class="tab" data-part="0" aria-pressed="true" id="tab0">Tất cả</button>
+        <button class="tab" data-part="1" aria-pressed="false" id="tab1">Phần 1 · Nền tảng &amp; kiến trúc</button>
+        <button class="tab" data-part="2" aria-pressed="false" id="tab2">Phần 2 · Lập trình Go</button>
+      </div>
+      <input class="search" id="q" type="search" placeholder="Tìm: quorum, prefetch, DLX, x-death, confirm, stream…" aria-label="Tìm kiếm">
+      <label class="toggle"><input type="checkbox" id="hideDone"> Ẩn chương đã xong</label>
+      <label class="toggle"><input type="checkbox" id="expandAll"> Mở tất cả</label>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="toc" id="toc" aria-label="Mục lục"></nav>
+  <main id="main"></main>
+</div>
+
+<script type="application/json" id="data">[{"id": 1, "chapters": [{"id": "p1c1", "num": 1, "title": "Message broker &amp; RabbitMQ", "intro": "Trước khi khai báo exchange hay viết consumer đầu tiên, cần hiểu <i>vì sao<\/i> người ta đặt một tiến trình trung gian vào giữa các dịch vụ, và cái giá phải trả là gì. Chương này đi từ bài toán giao tiếp giữa các thành phần phần mềm, phân tích các kiểu ràng buộc (coupling) mà messaging gỡ bỏ, các tình huống nên và không nên dùng message broker, so sánh RabbitMQ với Kafka, NATS, Redis Streams và Amazon SQS, điểm lại lịch sử AMQP và Erlang, rồi tóm tắt những thay đổi lớn của dòng 4.x. Nửa sau chương là phần thực hành: cài đặt, plugin, bộ công cụ dòng lệnh, Management UI, HTTP API và một ví dụ \"hello world\" hoàn toàn bằng dòng lệnh, chạy thật trên RabbitMQ 4.3.7.", "sections": [{"n": "1.1", "t": "Giao tiếp đồng bộ và bất đồng bộ", "sub": ["Mô hình yêu cầu – phản hồi đồng bộ", "Mô hình bất đồng bộ qua message broker"]}, {"n": "1.2", "t": "Coupling: những ràng buộc mà messaging gỡ bỏ", "sub": []}, {"n": "1.3", "t": "Các bài toán điển hình dùng messaging", "sub": ["Xử lý nền và tách tải (background job, offloading)", "Cân bằng tải với competing consumers", "Phát tán sự kiện (event fan-out, publish/subscribe)", "Đệm đỉnh tải (load leveling)", "Tích hợp đa ngôn ngữ và RPC bất đồng bộ", "Khi nào KHÔNG nên dùng message broker"]}, {"n": "1.4", "t": "So sánh RabbitMQ với các hệ thống khác", "sub": []}, {"n": "1.5", "t": "Lịch sử: AMQP, Erlang và RabbitMQ", "sub": ["AMQP ra đời từ ngành tài chính", "RabbitMQ và Erlang/OTP"]}, {"n": "1.6", "t": "Các dòng phiên bản: từ 3.x đến 4.x", "sub": ["Bảng mốc phiên bản", "Những thay đổi lớn của dòng 4.x cần nắm"]}, {"n": "1.7", "t": "Cài đặt RabbitMQ", "sub": ["Các cổng mạng cần biết", "Docker (cách nhanh nhất cho môi trường phát triển)", "Cài bằng gói của hệ điều hành", "Bản generic-unix (giải nén là chạy)", "Tệp cấu hình rabbitmq.conf"]}, {"n": "1.8", "t": "Plugin và Management UI", "sub": ["rabbitmq-plugins", "Management UI"]}, {"n": "1.9", "t": "Bộ công cụ dòng lệnh", "sub": ["rabbitmq-diagnostics: node có khỏe không?", "rabbitmqctl: quản trị đối tượng", "rabbitmq-queues", "rabbitmqadmin v2"]}, {"n": "1.10", "t": "HTTP API với curl", "sub": []}, {"n": "1.11", "t": "\"Hello world\" hoàn toàn bằng dòng lệnh", "sub": ["Bằng curl và HTTP API", "Bằng rabbitmqadmin v2", "Chuyện gì đã xảy ra bên trong?"]}, {"n": "1.12", "t": "Lỗi thường gặp khi mới bắt đầu", "sub": []}], "summary": ["Giao tiếp đồng bộ đơn giản nhưng cộng dồn độ trễ, nhân độ khả dụng và lan truyền quá tải; message broker gỡ bỏ ràng buộc thời gian, vị trí và tốc độ, đổi lại là tính nhất quán sau cùng và một hệ thống có trạng thái cần vận hành.", "Các bài toán kinh điển: xử lý nền, competing consumers, fan-out sự kiện, đệm đỉnh tải, tích hợp đa ngôn ngữ. Không dùng broker cho truy vấn đọc cần kết quả ngay.", "RabbitMQ là \"smart broker\": định tuyến linh hoạt qua exchange, ack từng message, nhiều giao thức; Kafka là log phân vùng cho luồng sự kiện lớn; NATS nhẹ và nhanh; SQS không cần vận hành.", "AMQP 0-9-1 định nghĩa mô hình exchange–queue–binding; AMQP 1.0 là giao thức khác. RabbitMQ viết bằng Erlang/OTP: mỗi queue là một tiến trình, nên một queue dùng tối đa khoảng một lõi CPU.", "Dòng 4.x: bỏ classic mirroring, AMQP 1.0 vào lõi, Khepri thay Mnesia (bắt buộc ở 4.3), classic queue chỉ còn v2, quorum queue có delivery-limit 20 mặc định; nhiều tính năng cũ bị cấm theo mặc định.", "Cài nhanh bằng Docker (cố định hostname), gói hệ điều hành hoặc generic-unix; nhớ dải phiên bản Erlang tương thích.", "Bộ công cụ: rabbitmqctl, rabbitmq-diagnostics, rabbitmq-plugins, rabbitmq-queues, rabbitmq-upgrade, rabbitmq-streams (qua phân tán Erlang) và rabbitmqadmin v2 (qua HTTP API); Management UI chỉ là một client của HTTP API."], "exercises": ["Tính độ khả dụng tổng của một chuỗi gọi đồng bộ gồm 5 dịch vụ, mỗi dịch vụ 99,95%. Nếu 3 trong 5 dịch vụ được chuyển sang xử lý bất đồng bộ qua broker có độ khả dụng 99,99%, độ khả dụng của luồng chính là bao nhiêu?", "Một hệ thống nhận 2.000 message/giây trong 10 phút cao điểm, worker xử lý 1.200 message/giây, mỗi message trung bình 2 KB. Ước lượng số message tồn đọng tối đa, dung lượng tương ứng và thời gian xả hết sau cao điểm.", "Tạo vhost riêng của bạn, dùng <code>rabbitmqctl list_exchanges<\/code> để liệt kê các exchange có sẵn. Exchange nào là <code>internal<\/code>? Thử publish vào nó qua HTTP API và ghi lại lỗi.", "Lặp lại \"hello world\" ở mục 1.11 nhưng dùng queue classic; so sánh output của <code>rabbitmqctl list_queues ... type<\/code> giữa hai queue.", "Viết script bash dùng các endpoint <code>/api/health/checks/*<\/code> làm healthcheck, thoát mã khác 0 nếu bất kỳ endpoint nào không trả <code>200<\/code>. So sánh với <code>rabbitmq-diagnostics -q check_port_connectivity<\/code>.", "Chạy <code>rabbitmqctl list_feature_flags name state<\/code> và <code>rabbitmqctl list_deprecated_features<\/code> trên broker của bạn. Tìm trong tài liệu ý nghĩa của ba feature flag bất kỳ và ghi chú tính năng nào bị cấm theo mặc định có thể ảnh hưởng tới ứng dụng của bạn.", "(Nâng cao) Viết một file Docker Compose chạy RabbitMQ 4.3 với plugin management, prometheus và stream, cấu hình <code>rabbitmq.conf<\/code> qua volume đặt <code>disk_free_limit.absolute = 2GB<\/code>, rồi kiểm tra giá trị bằng <code>rabbitmqctl eval<\/code>."]}, {"id": "p1c2", "num": 2, "title": "Mô hình AMQP 0-9-1", "intro": "AMQP 0-9-1 là \"ngôn ngữ mẹ đẻ\" của RabbitMQ. Dù dòng 4.x đưa AMQP 1.0 vào lõi, phần lớn client hiện nay (trong đó có thư viện <code>amqp091-go<\/code> dùng ở Phần 2) vẫn nói AMQP 0-9-1, và toàn bộ khái niệm exchange, queue, binding, ack, prefetch đều bắt nguồn từ đặc tả này. Chương này mổ xẻ mô hình: connection và channel, virtual host, bộ ba exchange–binding–queue, vòng đời đầy đủ của một message, cấu trúc message với 14 property, frame và heartbeat ở tầng dây, bảng các method của giao thức, và cuối cùng là các giao thức khác mà RabbitMQ hỗ trợ. Hiểu chương này, bạn sẽ đọc được mọi thông báo lỗi của broker và biết lỗi nằm ở tầng nào.", "sections": [{"n": "2.1", "t": "Bức tranh toàn cảnh", "sub": []}, {"n": "2.2", "t": "Connection", "sub": ["Bắt tay mở connection", "Connection là tài nguyên đắt", "Quan sát connection"]}, {"n": "2.3", "t": "Channel: ghép kênh trên một connection", "sub": ["Vì sao cần channel", "Phạm vi của channel", "Lỗi channel và lỗi connection"]}, {"n": "2.4", "t": "Virtual host", "sub": ["Cô lập logic", "Khi nào dùng nhiều vhost"]}, {"n": "2.5", "t": "Exchange, queue, binding và routing key", "sub": []}, {"n": "2.6", "t": "Vòng đời của một message", "sub": []}, {"n": "2.7", "t": "Cấu trúc message", "sub": ["Body và properties", "Thử nghiệm đầy đủ các property", "Những property có \"răng\"", "Kiểu dữ liệu trong headers"]}, {"n": "2.8", "t": "Frame và heartbeat", "sub": ["Cấu trúc frame", "Heartbeat"]}, {"n": "2.9", "t": "Bảng các method AMQP 0-9-1", "sub": []}, {"n": "2.10", "t": "Các giao thức khác trong RabbitMQ", "sub": ["AMQP 1.0", "MQTT và STOMP", "Stream protocol"]}, {"n": "2.11", "t": "Lỗi thường gặp và cách nghĩ đúng", "sub": []}], "summary": ["Mô hình AMQP 0-9-1: connection (TCP, đã xác thực, gắn một vhost) chứa nhiều channel; publisher gửi tới exchange; binding quyết định message vào queue nào; consumer nhận và ack từ queue.", "Bắt tay connection gồm protocol header, start/start-ok (xác thực), tune/tune-ok (thương lượng channel_max 2047, frame_max 131072, heartbeat), open (chọn vhost). Lỗi 403 ở bước xác thực, 530 khi vhost không tồn tại.", "Channel là ghép kênh trên một connection; prefetch, delivery tag, confirm đều theo channel. Lỗi channel (403, 404, 405, 406) đóng channel; lỗi connection (320, 501–505, 530, 541) đóng cả connection. Nhiều thao tác (publish, ack) là bất đồng bộ nên lỗi chỉ đến qua NotifyClose.", "Vhost là không gian tên cô lập logic với quyền riêng; <code>/<\/code> được mã hóa là <code>%2F<\/code>.", "Vòng đời message: publish → định tuyến → lưu vào queue → (confirm) → deliver (unacked) → ack → xóa; channel đóng trước khi ack thì message được giao lại — nền tảng của at-least-once.", "Message gồm body (tối đa 16 MiB mặc định) và 14 property; <code>user_id<\/code>, <code>expiration<\/code>, <code>reply_to<\/code> (direct reply-to) được broker kiểm tra; <code>message_id<\/code>, <code>correlation_id<\/code>, <code>type<\/code>, <code>headers<\/code> là công cụ thiết kế quan trọng.", "Frame có bốn loại (method, header, body, heartbeat); heartbeat phát hiện kết nối chết sau khoảng hai chu kỳ; nên dùng 5–30 giây.", "RabbitMQ còn hỗ trợ AMQP 1.0 (lõi, địa chỉ v2), MQTT, STOMP, stream protocol và các biến thể WebSocket, cùng chia sẻ exchange/queue."], "exercises": ["Vẽ lại sơ đồ bắt tay connection và đánh dấu bước nào sẽ thất bại trong mỗi trường hợp: sai mật khẩu, vhost không tồn tại, user không có permission trên vhost, server không bật TLS nhưng client dùng <code>amqps://<\/code>.", "Viết chương trình Go mở một connection với <code>connection_name<\/code> tùy ý và 5 channel; dùng <code>rabbitmqctl list_connections name channels client_properties<\/code> và <code>list_channels<\/code> để xác nhận. Sau đó đóng connection bằng <code>rabbitmqctl close_connection<\/code> và quan sát lỗi mà chương trình nhận qua <code>NotifyClose<\/code>.", "Publish qua HTTP API một message có <code>timestamp<\/code> tính bằng mili giây (13 chữ số) và đọc lại. Broker có từ chối không? Vì sao đây vẫn là lỗi về mặt ứng dụng?", "Tính số frame được gửi khi publish 1.000 message, mỗi message 200 KB, với <code>frame_max<\/code> mặc định. Nếu tăng <code>frame_max<\/code> lên 1 MiB thì sao? Thảo luận ưu nhược của frame lớn.", "Thử nghiệm heartbeat: chạy một consumer Go với heartbeat 5 giây, rồi tạm dừng tiến trình bằng <code>kill -STOP &lt;pid&gt;<\/code>. Sau bao lâu connection biến mất khỏi <code>rabbitmqctl list_connections<\/code>? Message unacked đi đâu? (Nhớ <code>kill -CONT<\/code> sau đó.)", "Liệt kê ba method đồng bộ và ba method bất đồng bộ trong bảng ở mục 2.9 và giải thích vì sao thiết kế giao thức chọn như vậy cho từng method.", "(Nâng cao) Thiết kế bộ header chuẩn cho các sự kiện trong công ty bạn (trace id, tenant, schema version, nguồn gửi...). Quyết định trường nào dùng property chuẩn (<code>message_id<\/code>, <code>type<\/code>, <code>app_id<\/code>, <code>timestamp<\/code>) và trường nào đặt trong <code>headers<\/code>, giải thích lý do."]}, {"id": "p1c3", "num": 3, "title": "Exchange &amp; định tuyến", "intro": "Exchange là nơi thể hiện rõ nhất triết lý \"smart broker\" của RabbitMQ: publisher chỉ nói \"đây là sự kiện <code>order.created.vn<\/code>\", còn việc ai nhận, nhận bao nhiêu bản, do cấu hình định tuyến trên broker quyết định. Chương này đi qua từng loại exchange — default, direct, fanout, topic, headers — với các thí nghiệm định tuyến chạy thật để thấy chính xác message đi đâu, sau đó là các cơ chế nâng cao: exchange-to-exchange binding, alternate exchange, các thuộc tính durable/auto-delete/internal, các exchange có sẵn <code>amq.*<\/code>, và hướng dẫn chọn loại exchange cho từng bài toán. Mọi ví dụ được tạo trong vhost <code>p1a<\/code> bằng HTTP API, rabbitmqadmin và Go.", "sections": [{"n": "3.1", "t": "Exchange hoạt động như thế nào", "sub": ["Exchange là bảng định tuyến, không phải tiến trình", "Thuộc tính của exchange"]}, {"n": "3.2", "t": "Default exchange", "sub": ["Exchange không tên", "Những gì không được làm với default exchange"]}, {"n": "3.3", "t": "Direct exchange", "sub": ["Quy tắc", "Thí nghiệm", "Khi nào dùng direct"]}, {"n": "3.4", "t": "Fanout exchange", "sub": []}, {"n": "3.5", "t": "Topic exchange", "sub": ["Quy tắc khớp mẫu", "Thí nghiệm: bảng khớp thật", "Thiết kế routing key cho topic", "Hiệu năng"]}, {"n": "3.6", "t": "Headers exchange", "sub": ["Định tuyến theo header thay vì routing key", "Thí nghiệm", "Khi nào dùng headers exchange"]}, {"n": "3.7", "t": "Exchange-to-exchange binding", "sub": []}, {"n": "3.8", "t": "Alternate exchange", "sub": ["Hứng message không định tuyến được", "Cấu hình bằng policy (khuyến nghị)", "AE và cờ mandatory"]}, {"n": "3.9", "t": "Durable, auto-delete và internal", "sub": ["Durable", "Auto-delete", "Internal"]}, {"n": "3.10", "t": "Các exchange có sẵn và loại exchange mở rộng", "sub": ["Exchange amq.*", "Loại exchange từ lõi mới và plugin"]}, {"n": "3.11", "t": "Chọn loại exchange nào?", "sub": []}, {"n": "3.12", "t": "Quản lý topology: khai báo và kiểm tra", "sub": ["Ai khai báo topology?", "Bằng rabbitmqadmin v2", "Kiểm tra định tuyến"]}, {"n": "3.13", "t": "Lỗi thường gặp", "sub": []}], "summary": ["Exchange là bảng định tuyến (metadata + binding), không lưu message; định tuyến diễn ra trong tiến trình channel của publisher. Không khớp binding nào thì message bị bỏ.", "Default exchange (<code>\"\"<\/code>, <code>amq.default<\/code> trong HTTP API) bind ngầm mọi queue theo tên; không thể bind/unbind/xóa nó.", "Direct khớp chính xác routing key; fanout bỏ qua routing key; topic khớp mẫu với <code>*<\/code> (đúng một từ) và <code>#<\/code> (không hoặc nhiều từ); headers khớp theo bảng header với <code>x-match<\/code> all/any/all-with-x/any-with-x, trong đó all/any bỏ qua header <code>x-<\/code>.", "Exchange-to-exchange binding cho phép topology nhiều tầng; mỗi queue nhận tối đa một bản dù có chu trình hay nhiều đường.", "Alternate exchange hứng message không định tuyến được; nên cấu hình qua policy. Khi AE định tuyến thành công, mandatory không sinh basic.return.", "Durable nói về metadata của exchange, không phải message; auto-delete xóa exchange khi binding cuối bị gỡ; internal chặn publish trực tiếp.", "Tiền tố <code>amq.<\/code> được dành riêng. Ngoài bốn loại chuẩn còn <code>x-local-random<\/code> (lõi 4.x) và các loại từ plugin như <code>x-consistent-hash<\/code>.", "Mặc định hợp lý cho sự kiện nghiệp vụ: topic exchange có tên, routing key có cấu trúc, AE qua policy."], "exercises": ["Với binding key <code><i>.<\/i>.vn<\/code>, <code>shop.#.vn<\/code>, <code>#.order.#<\/code>, hãy dự đoán routing key nào trong các key sau khớp với từng binding: <code>shop.order.vn<\/code>, <code>order.vn<\/code>, <code>shop.order.created.vn<\/code>, <code>vn<\/code>, <code>shop..vn<\/code>. Kiểm chứng bằng HTTP API như mục 3.5.2.", "Thiết kế cấu trúc routing key cho hệ thống thương mại điện tử có 3 domain (order, payment, shipping), 4 loại sự kiện mỗi domain và 5 quốc gia. Viết binding key cho: dịch vụ email (mọi sự kiện order và shipping), đội Việt Nam (mọi thứ ở VN), dịch vụ chống gian lận (mọi sự kiện payment.failed).", "Dựng topology: exchange <code>public.events<\/code> (topic) nhận publish; exchange <code>internal.audit<\/code> (fanout, internal) bind từ <code>public.events<\/code> với <code>#<\/code>; hai queue nhận từ <code>internal.audit<\/code>. Chứng minh publisher không thể gửi thẳng vào <code>internal.audit<\/code>.", "Viết chương trình Go publish với <code>mandatory=true<\/code> vào một topic exchange không có binding nào, in <code>ReplyCode<\/code> và <code>ReplyText<\/code> của <code>amqp.Return<\/code>. Sau đó thêm AE qua policy và chạy lại.", "Tạo headers exchange với binding <code>{\"x-match\":\"all\",\"priority\":5}<\/code> (số). Publish message có header <code>priority<\/code> là chuỗi <code>\"5\"<\/code> qua HTTP API rồi là số 5. Ghi lại kết quả và giải thích.", "Xuất topology của vhost bằng <code>GET /api/definitions/{vhost}<\/code> (hoặc <code>rabbitmqadmin definitions export<\/code>), xóa một exchange, rồi khôi phục bằng import. Thảo luận vì sao definitions không chứa message.", "(Nâng cao) Bật thử plugin <code>rabbitmq_consistent_hash_exchange<\/code> trên broker dev của bạn, tạo exchange <code>x-consistent-hash<\/code> bind tới 4 queue với trọng số <code>\"1\"<\/code>, publish 10.000 message với routing key ngẫu nhiên và đo phân bố message giữa các queue."]}, {"id": "p1c4", "num": 4, "title": "Queue &amp; các loại queue", "intro": "Nếu exchange là bộ định tuyến thì queue là nơi dữ liệu thực sự sống. Mọi quyết định về độ bền, nhân bản, thứ tự, giới hạn bộ nhớ, thời gian sống của message đều xoay quanh queue. Dòng 4.x thay đổi bức tranh queue nhiều nhất trong lịch sử RabbitMQ: classic mirrored queue không còn, classic queue chỉ còn phiên bản 2, quorum queue trở thành lựa chọn mặc định cho dữ liệu quan trọng, stream trưởng thành. Chương này trình bày các thuộc tính của queue, ba loại queue và cơ chế bên trong của chúng, bảng so sánh tính năng đã kiểm chứng trên RabbitMQ 4.3.7, các cơ chế TTL, giới hạn độ dài và overflow, priority, single active consumer, policy và operator policy, và cuối cùng là lỗi <code>PRECONDITION_FAILED<\/code> kinh điển khi khai báo không tương đương.", "sections": [{"n": "4.1", "t": "Thuộc tính cơ bản của queue", "sub": ["Bốn thuộc tính và bảng arguments", "Durable: metadata và message là hai chuyện", "Queue không bền bị cấm theo mặc định ở 4.3", "Exclusive và tên do server sinh"]}, {"n": "4.2", "t": "Classic queue (phiên bản 2)", "sub": ["Cơ chế bên trong", "Khi nào vẫn dùng classic queue"]}, {"n": "4.3", "t": "Quorum queue", "sub": ["Raft trong một câu", "Khai báo và quan sát", "Những ràng buộc của quorum queue", "Đặc tính riêng: delivery limit và poison message", "Khi nào dùng quorum queue"]}, {"n": "4.4", "t": "Stream", "sub": []}, {"n": "4.5", "t": "Bảng so sánh ba loại queue", "sub": []}, {"n": "4.6", "t": "TTL: thời gian sống của message và của queue", "sub": ["TTL message theo queue và theo từng message", "Message hết hạn bị xóa khi nào?", "TTL của queue: x-expires"]}, {"n": "4.7", "t": "Giới hạn độ dài và hành vi tràn (overflow)", "sub": ["max-length và max-length-bytes", "Ba chế độ overflow"]}, {"n": "4.8", "t": "Priority queue", "sub": ["Classic queue: x-max-priority", "Quorum queue: priority có sẵn", "Những điều cần biết về priority"]}, {"n": "4.9", "t": "Single active consumer", "sub": []}, {"n": "4.10", "t": "Policy và x-arguments", "sub": ["Hai cách cấu hình queue", "Vì sao nên ưu tiên policy", "Operator policy", "Thứ tự ưu tiên: thí nghiệm thật"]}, {"n": "4.11", "t": "PRECONDITION_FAILED: khai báo không tương đương", "sub": ["Quy tắc tương đương", "Các nguồn gây lỗi 406 thường gặp", "Cách phòng tránh và chuyển đổi"]}, {"n": "4.12", "t": "Lỗi thường gặp", "sub": []}], "summary": ["Queue có bốn thuộc tính (name, durable, exclusive, auto_delete) và bảng arguments. Ở 4.3, queue không durable chỉ được phép nếu exclusive; vi phạm gây lỗi 541 đóng cả connection qua AMQP.", "Classic queue (chỉ còn v2) chạy trên một node, không nhân bản; hợp cho queue tạm và dữ liệu tái tạo được. Chế độ lazy không còn ý nghĩa.", "Quorum queue nhân bản bằng Raft, commit khi đa số ghi đĩa; luôn durable, không exclusive/auto-delete; có delivery-limit mặc định 20 và priority có sẵn (32 mức nghiêm ngặt ở 4.3). Là lựa chọn mặc định cho dữ liệu quan trọng.", "Stream là log append-only có nhân bản và retention, đọc không xóa, không có <code>basic.get<\/code> và TTL từng message (chi tiết ở Chương 8).", "TTL theo queue và theo message: giá trị nhỏ hơn thắng; TTL từng message chỉ được xử lý khi message tới đầu queue. <code>x-expires<\/code> xóa queue không dùng.", "<code>max-length<\/code>/<code>max-length-bytes<\/code> với overflow <code>drop-head<\/code> (bỏ cũ), <code>reject-publish<\/code> (từ chối mới, publisher nhận nack) hoặc <code>reject-publish-dlx<\/code>.", "Single active consumer cho xử lý tuần tự có dự phòng nóng.", "Ưu tiên policy hơn x-argument cho tham số thay đổi được; mỗi đối tượng chỉ chịu một policy; operator policy áp trần. Đã kiểm chứng: với max-length và message-ttl, giá trị nhỏ nhất trong argument/policy/operator policy được áp dụng.", "<code>PRECONDITION_FAILED<\/code> xảy ra khi khai báo không tương đương; thông báo lỗi chỉ rõ argument, giá trị và kiểu."], "exercises": ["Khai báo cùng tên queue <code>exam.q<\/code> hai lần qua HTTP API: lần đầu classic, lần hai quorum. Ghi lại lỗi. Làm lại bằng Go và quan sát channel sau lỗi còn dùng được không.", "Tạo queue với <code>x-message-ttl: 10000<\/code>, publish ba message có <code>expiration<\/code> lần lượt 60000, 1000, 1000. Sau 3 giây, <code>messages<\/code> của queue là bao nhiêu? Lấy message đầu ra rồi kiểm tra lại. Giải thích dựa trên mục 4.6.2.", "So sánh <code>drop-head<\/code> và <code>reject-publish<\/code> với <code>x-max-length-bytes: 1024<\/code> và các message 300 byte. Message thứ mấy bắt đầu bị loại/từ chối?", "Viết policy duy nhất áp dụng cho mọi queue có tên bắt đầu <code>jobs.<\/code> gồm: max-length 100000, overflow reject-publish, dead-letter-exchange <code>dlx<\/code>. Sau đó tạo thêm một policy priority cao hơn cho <code>jobs.critical<\/code> chỉ có <code>max-length<\/code>. Queue <code>jobs.critical<\/code> còn DLX không? Kiểm chứng bằng <code>effective_policy_definition<\/code>.", "Với quorum queue, publish 10 message priority ngẫu nhiên từ 0 đến 31, consume với prefetch 1 và kiểm tra thứ tự. Lặp lại với prefetch 50 và giải thích sự khác biệt.", "Viết chương trình Go cho single active consumer với ba consumer; lần lượt đóng consumer đang active và ghi lại thứ tự consumer được kích hoạt.", "(Nâng cao) Lập kế hoạch chuyển một classic queue <code>orders<\/code> đang chạy production (có consumer, có tồn đọng) sang quorum queue không mất message và không dừng publisher. Viết từng bước với lệnh cụ thể (binding song song, chuyển consumer, shovel hoặc chờ rỗng, xóa queue cũ)."]}, {"id": "p1c5", "num": 5, "title": "Consumer, Acknowledgement &amp; Prefetch", "intro": "Gửi message vào queue mới là một nửa câu chuyện; nửa còn lại — và là nửa gây ra nhiều sự cố production nhất — là cách message được lấy ra. Consumer nhận message theo cơ chế nào, khi nào broker được phép xóa message, chuyện gì xảy ra khi consumer chết giữa chừng, vì sao một consumer chậm có thể \"ôm\" hàng nghìn message trong khi consumer khác ngồi chơi, vì sao một message lỗi có thể quay vòng vô hạn — tất cả được quyết định bởi ba cơ chế: xác nhận (acknowledgement), prefetch và các thuộc tính của consumer. Chương này mổ xẻ từng cơ chế với thí nghiệm thật trên RabbitMQ 4.3.7, đặc biệt là những thay đổi hành vi quan trọng của dòng 4.3 về delivery-count và consumer timeout. Phần 2 (Chương 2 và Chương 5) sẽ biến các kiến thức này thành mã Go cho worker pool và xử lý lỗi.", "sections": [{"n": "5.1", "t": "Push và pull: basic.consume và basic.get", "sub": ["Hai cách lấy message", "Vì sao pull gần như luôn là lựa chọn sai"]}, {"n": "5.2", "t": "Vòng đời consumer", "sub": ["Đăng ký: basic.consume", "Hủy: từ phía client và từ phía broker"]}, {"n": "5.3", "t": "Auto-ack và manual ack", "sub": ["Hai chế độ", "Cái bẫy ít người biết của auto-ack: không có prefetch"]}, {"n": "5.4", "t": "ack, nack, reject và requeue", "sub": ["Ba method xác nhận", "Requeue về đâu?", "Cờ multiple", "Delivery tag: phạm vi channel"]}, {"n": "5.5", "t": "Prefetch (basic.qos)", "sub": ["Prefetch là gì", "Ngữ nghĩa của RabbitMQ khác đặc tả", "Prefetch ảnh hưởng thông lượng thế nào", "Prefetch quá lớn: consumer chậm \"ôm\" message"]}, {"n": "5.6", "t": "Poison message, requeue và cờ redelivered", "sub": ["Cờ redelivered", "Vòng lặp requeue vô hạn"]}, {"n": "5.7", "t": "Delivery-count và delivery-limit của quorum queue (4.3)", "sub": ["Hai bộ đếm", "Thí nghiệm ba cách trả message", "Cấu hình delivery-limit"]}, {"n": "5.8", "t": "Consumer priority và exclusive consumer", "sub": ["Consumer priority", "Exclusive consumer"]}, {"n": "5.9", "t": "Consumer timeout", "sub": ["Vấn đề", "Thay đổi ở 4.3", "Thí nghiệm trên quorum queue", "Chọn giá trị timeout"]}, {"n": "5.10", "t": "Bức tranh tổng hợp: trạng thái của một message", "sub": []}, {"n": "5.11", "t": "Lỗi thường gặp", "sub": []}], "summary": ["Dùng <code>basic.consume<\/code> (push) cho mọi consumer thường trực; <code>basic.get<\/code> (pull) chỉ cho công cụ và kiểm tra thủ công, và không dùng được với stream.", "Auto-ack là at-most-once và bỏ qua prefetch; manual ack là at-least-once. Ack sau khi xử lý xong và đã ghi kết quả bền vững.", "<code>basic.ack<\/code> xác nhận; <code>basic.reject<\/code>/<code>basic.nack<\/code> từ chối với <code>requeue=true<\/code> (về gần đầu queue) hoặc <code>false<\/code> (dead-letter/xóa). Cờ multiple ack nhiều message một lần nhưng nguy hiểm khi xử lý song song.", "Delivery tag theo channel; ack sai tag gây 406 và đóng channel, trả mọi unacked về queue.", "Prefetch giới hạn số unacked theo consumer (RabbitMQ diễn giải <code>global=false<\/code> là theo consumer; <code>global=true<\/code> bị cấm ở 4.3; <code>prefetch_size<\/code> khác 0 là lỗi 540 cấp connection). Prefetch nhỏ cho việc lâu, lớn cho việc nhanh; không dùng 0.", "<code>redelivered<\/code> chỉ là gợi ý. Ở 4.3, quorum queue có <code>x-acquired-count<\/code> (mọi lần trả về) và <code>x-delivery-count<\/code> (chỉ lần thất bại: reject, channel đóng, crash); nack có requeue không bị delivery-limit chặn — đã kiểm chứng.", "Consumer priority ưu tiên consumer còn chỗ, không độc quyền; exclusive consumer từ chối consumer khác (403), khác single active consumer.", "Ở 4.3, consumer timeout chỉ được quorum queue đánh giá; khi hết hạn broker gửi <code>basic.cancel<\/code> cho consumer, message quay về ready, ack muộn bị bỏ qua."], "exercises": ["Viết consumer Go với <code>autoAck=true<\/code> trên queue có 100.000 message nhỏ, xử lý mỗi message mất 1 ms. Theo dõi bộ nhớ tiến trình và <code>messages_ready<\/code> của queue. Lặp lại với manual ack và prefetch 100. Giải thích khác biệt.", "Chạy hai consumer trên cùng queue, một xử lý 10 ms/message, một xử lý 500 ms/message. Đo thời gian xử lý hết 1.000 message với prefetch 1, 10 và 200. Vẽ bảng kết quả và giải thích hiện tượng \"ôm message\".", "Viết consumer xử lý song song bằng 10 goroutine và ack bằng <code>multiple=true<\/code>. Thiết kế cơ chế \"watermark\" để chỉ ack khi mọi tag nhỏ hơn đã xong. Gợi ý: lưu tập tag đã xong và tag nhỏ nhất chưa xong.", "Trên quorum queue với <code>delivery-limit<\/code> 5 và một DLX trỏ tới queue <code>poison<\/code>, viết consumer luôn lỗi. So sánh số lần giao trước khi message vào <code>poison<\/code> khi xử lý lỗi bằng <code>Reject(true)<\/code> và bằng <code>Nack(false, true)<\/code>. Kết quả có khớp bảng ở mục 5.7.2?", "Đặt policy <code>consumer-timeout<\/code> 10 giây cho một quorum queue. Viết consumer đôi khi xử lý 15 giây. Xử lý <code>NotifyCancel<\/code> để consumer tự đăng ký lại, và ghi log số message bị xử lý trùng.", "Thiết kế cấu hình consumer priority cho hệ thống có worker ở hai vùng (cùng vùng với broker và khác vùng). Chọn prefetch và priority sao cho worker xa chỉ nhận việc khi worker gần quá tải. Kiểm chứng bằng thí nghiệm tương tự mục 5.8.1.", "(Nâng cao) Một hệ thống đang chạy 3.13 dùng <code>Nack(false, true)<\/code> cho mọi lỗi và dựa vào delivery-limit để loại poison message. Viết kế hoạch thay đổi code trước khi nâng cấp lên 4.3, gồm phân loại lỗi tạm thời/vĩnh viễn và cách kiểm thử hành vi mới."]}, {"id": "p1c6", "num": 6, "title": "Độ tin cậy end-to-end", "intro": "Các chương trước đã trang bị đủ \"linh kiện\": exchange định tuyến message (Chương 3), queue lưu trữ chúng (Chương 4), consumer nhận và xác nhận (Chương 5). Chương này ghép các linh kiện đó thành một câu hỏi duy nhất mà mọi hệ thống production đều phải trả lời: <b>khi publisher gửi một message, làm sao chắc chắn nó được xử lý đúng một lần về mặt nghiệp vụ, kể cả khi mạng chập chờn, broker khởi động lại hay consumer bị kill giữa chừng?<\/b> Câu trả lời không nằm ở một tính năng đơn lẻ mà ở một chuỗi bảo đảm nối tiếp nhau: publisher confirms, cờ mandatory, queue bền vững được nhân bản, ack thủ công, idempotency phía consumer, và mẫu outbox để gắn việc ghi cơ sở dữ liệu với việc phát message. Chỉ cần một mắt xích yếu là toàn chuỗi yếu.", "sections": [{"n": "6.1", "t": "Message có thể mất ở đâu?", "sub": []}, {"n": "6.2", "t": "Publisher confirms", "sub": ["Cơ chế hoạt động", "Một confirm thực sự bảo đảm điều gì?", "Thí nghiệm: ack, nack và return", "Ba chiến lược chờ confirm và số liệu thật", "Xử lý nack, timeout và thứ tự xác nhận"]}, {"n": "6.3", "t": "Cờ mandatory và basic.return", "sub": []}, {"n": "6.4", "t": "Bền vững: durable, persistent và quorum", "sub": ["Ba lớp bền vững", "Những thay đổi của dòng 4.x liên quan độ bền"]}, {"n": "6.5", "t": "Transaction: có nhưng không nên dùng", "sub": []}, {"n": "6.6", "t": "Các mức bảo đảm giao nhận", "sub": ["At-most-once, at-least-once và \"exactly-once\"", "Kỹ thuật idempotency"]}, {"n": "6.7", "t": "Outbox và Inbox pattern", "sub": ["Bài toán ghi kép (dual write)", "Transactional outbox", "Inbox pattern"]}, {"n": "6.8", "t": "Phía consumer: ack đúng lúc", "sub": []}, {"n": "6.9", "t": "Flow control và alarm ảnh hưởng tới publisher", "sub": ["Credit flow nội bộ", "Resource alarm và connection.blocked"]}, {"n": "6.10", "t": "Bảng tổng hợp: kịch bản mất message và cách chặn", "sub": []}, {"n": "6.11", "t": "Lỗi thường gặp", "sub": []}], "summary": ["Message có thể mất ở sáu điểm: dual write, mạng tới broker, routing, lưu trữ, giao cho consumer, xử lý phía consumer. Mỗi điểm cần một biện pháp riêng.", "Publisher confirms cho biết khi nào broker nhận trách nhiệm: sau ghi đĩa (classic persistent), sau khi đa số replica ghi log (quorum, stream). Message không route được vẫn được ack.", "<code>mandatory<\/code> khiến broker trả lại message không route được (<code>312 NO_ROUTE<\/code>), <code>basic.return<\/code> luôn đến trước <code>basic.ack<\/code>.", "Chờ confirm theo lô/bất đồng bộ nhanh hơn chờ từng message hàng chục lần (đo thật: 384 so với 21 nghìn msg/s).", "Độ bền cần queue durable + message persistent + nhân bản; quorum queue ghi đĩa mọi message và chịu được mất một node trong cụm 3. Mirroring cũ đã bị loại bỏ từ 4.0.", "Transaction AMQP tồn tại nhưng đồng bộ, không chi tiết theo message và không giải quyết dual write; dùng confirm.", "Exactly-once chỉ đạt được ở mức xử lý: at-least-once + idempotency (inbox, upsert, version).", "Transactional outbox giải bài toán ghi DB và publish; relay publish có confirm, chấp nhận trùng.", "Alarm bộ nhớ/đĩa chặn publisher toàn cluster, kết nối chỉ bị chặn thật khi publish (<code>blocking<\/code> rồi <code>blocked<\/code>); tách connection publish/consume và theo dõi <code>connection.blocked<\/code>."], "exercises": ["Viết lại chương trình ở mục 6.2.3 nhưng publish tới exchange <code>amq.direct<\/code> với routing key không có binding, không đặt <code>mandatory<\/code>. Kiểm tra metric <code>rabbitmq_global_messages_unroutable_dropped_total<\/code> trên cổng 15692 trước và sau khi chạy.", "Lặp lại thí nghiệm <code>x-max-length=2<\/code> với <code>x-overflow=reject-publish-dlx<\/code> và một DLX. Message thứ ba nhận ack hay nack? Nó đi đâu? (Gợi ý: đối chiếu với Chương 4 và Chương 7.)", "Cài đặt publisher bất đồng bộ với cửa sổ trượt tối đa 500 message in-flight bằng <code>NotifyPublish<\/code>, đo thông lượng và so với bảng ở mục 6.2.4.", "Mô phỏng mất ack: publish 1000 message có <code>message_id<\/code>, ngắt kết nối (kill tiến trình) giữa chừng, khởi động lại và gửi lại mọi message chưa được ack. Đếm số bản trùng ở consumer và chứng minh bảng inbox loại được chúng.", "Thiết kế bảng outbox và viết relay (ngôn ngữ tùy chọn) dùng <code>FOR UPDATE SKIP LOCKED<\/code>. Chạy hai relay song song; điều gì xảy ra với thứ tự sự kiện của cùng một đơn hàng? Đề xuất cách giữ thứ tự theo <code>order_id<\/code>.", "Trên một node thử nghiệm (không phải node dùng chung), hạ <code>vm_memory_high_watermark<\/code> để kích hoạt alarm bộ nhớ khi đang publish. Quan sát trạng thái kết nối <code>blocking<\/code>/<code>blocked<\/code>, và chứng minh rằng consumer trên <b>cùng<\/b> connection cũng ngừng nhận được ack.", "Lập bảng phân tích cho một luồng nghiệp vụ thật của bạn (ví dụ thanh toán): liệt kê từng điểm mất/trùng message theo mục 6.1 và biện pháp bạn chọn cho mỗi điểm."]}, {"id": "p1c7", "num": 7, "title": "Dead Lettering, TTL, Retry &amp; Delay", "intro": "Chương 6 kết thúc bằng một mệnh đề: hệ thống tin cậy là hệ thống at-least-once kết hợp consumer idempotent. Nhưng \"ít nhất một lần\" đặt ra câu hỏi tiếp theo: <b>khi xử lý thất bại thì làm gì với message?<\/b> Requeue ngay lập tức dễ tạo vòng lặp nóng đốt CPU; bỏ đi thì mất dữ liệu; giữ mãi trong queue chính thì chặn các message lành. Chương này trình bày bộ công cụ RabbitMQ cung cấp cho bài toán đó: dead letter exchange (DLX), header <code>x-death<\/code>, TTL, các mẫu retry có độ trễ, parking-lot queue, chế độ dead-letter at-least-once của quorum queue, tính năng <b>delayed retry<\/b> gốc của quorum queue trong 4.3, và câu chuyện của plugin delayed message exchange (vì sao không còn dùng được trên 4.3).", "sections": [{"n": "7.1", "t": "Dead letter exchange là gì", "sub": ["Khái niệm", "Argument hay policy?"]}, {"n": "7.2", "t": "Bốn lý do dead-letter", "sub": ["Danh sách lý do", "Thí nghiệm: tạo cả bốn loại thư chết", "Chi tiết về TTL và dead-letter"]}, {"n": "7.3", "t": "Header x-death", "sub": ["Cấu trúc", "Quan sát x-death tiến hóa qua vòng retry", "Đọc x-death trong Go"]}, {"n": "7.4", "t": "Retry có độ trễ bằng TTL + DLX", "sub": ["Vì sao không requeue ngay?", "Mẫu retry đơn giản: một hàng đợi trễ", "Backoff tăng dần: nhiều hàng đợi trễ", "Parking-lot queue"]}, {"n": "7.5", "t": "Dead-letter at-least-once của quorum queue", "sub": ["Vấn đề của dead-letter mặc định", "Chiến lược at-least-once", "delivery-count, acquired-count và thay đổi của 4.3"]}, {"n": "7.6", "t": "Delayed retry gốc của quorum queue (4.3)", "sub": ["Cơ chế", "Thí nghiệm"]}, {"n": "7.7", "t": "Plugin delayed message exchange", "sub": ["Cách dùng (trên các phiên bản được hỗ trợ)", "Giới hạn nghiêm trọng", "Thử thật trên 4.3.7"]}, {"n": "7.8", "t": "So sánh các chiến lược retry", "sub": []}, {"n": "7.9", "t": "Lỗi thường gặp", "sub": []}], "summary": ["DLX là exchange bình thường nhận message bị loại khỏi queue; cấu hình bằng policy (<code>dead-letter-exchange<\/code>, <code>dead-letter-routing-key<\/code>) để có thể thay đổi sau.", "Bốn lý do dead-letter: <code>rejected<\/code> (requeue=false), <code>expired<\/code>, <code>maxlen<\/code>, <code>delivery_limit<\/code>. Queue hết hạn không dead-letter message.", "<code>x-death<\/code> nén lịch sử theo cặp (queue, reason), sắp theo độ mới, <code>count<\/code> là bộ đếm, <code>time<\/code> là lần đầu; có thêm <code>x-first-death-<i><\/code> và <code>x-last-death-<\/i><\/code>.", "Retry có độ trễ kinh điển: work queue + wait queue TTL + DLX quay về; backoff dùng mỗi mức trễ một queue; hết lượt thì đưa vào parking-lot.", "Dead-letter mặc định là at-most-once; quorum queue hỗ trợ <code>at-least-once<\/code> nhưng bắt buộc <code>x-overflow=reject-publish<\/code>, nếu không broker tự hạ cấp.", "Quorum queue 4.3: delivery-limit dựa trên delivery-count; <code>basic.reject<\/code> tăng, <code>basic.nack<\/code> không tăng; header mới <code>x-acquired-count<\/code>.", "Quorum queue 4.3 có delayed retry gốc với backoff tuyến tính (<code>x-delayed-retry-type/min/max<\/code>), đã kiểm chứng: 1 s, 2 s, 3 s, 3 s.", "Plugin delayed message exchange không bật được trên 4.3.7 (chỉ hỗ trợ 4.2.x) và đã ngừng bảo trì do Mnesia bị loại bỏ."], "exercises": ["Dựng lại bốn queue ở mục 7.2.2 nhưng dùng <b>policy<\/b> thay vì x-argument cho DLX. Sau đó đổi DLX sang exchange khác chỉ bằng cách cập nhật policy, và chứng minh message mới đi theo cấu hình mới.", "Trong một classic queue, publish lần lượt message A với <code>expiration=\"30000\"<\/code> và message B với <code>expiration=\"1000\"<\/code>. Sau 2 giây, B đã bị dead-letter chưa? Giải thích bằng cơ chế hết hạn ở đầu queue.", "Tạo vòng dead-letter A -&gt; B -&gt; A chỉ bằng TTL (không consumer). Quan sát điều gì xảy ra với message sau vòng đầu tiên và đối chiếu với mục 7.3.3.", "Viết consumer Go cài đặt backoff 1 s / 5 s / 30 s bằng ba wait queue (mục 7.4.3), publish bản sao có confirm rồi mới ack bản gốc; sau lần thử thứ tư thì chuyển vào parking-lot kèm header <code>x-error<\/code>.", "Khai báo quorum queue với <code>x-dead-letter-strategy=at-least-once<\/code> và <code>x-overflow=reject-publish<\/code>, nhưng DLX <b>không có binding<\/b>. Reject 100 message không requeue. Quan sát số message của queue nguồn (gợi ý: xem <code>messages<\/code> và các trường dead-letter trong <code>rabbitmq-queues quorum_status<\/code> hoặc HTTP API). Điều gì xảy ra khi thêm binding?", "Lặp lại thí nghiệm ở mục 7.6.2 với <code>x-delayed-retry-type=failed<\/code>. Dự đoán và kiểm chứng: consumer dùng <code>Nack(false, true)<\/code> có bị trì hoãn không?", "Một hệ thống đang dùng plugin delayed message exchange trên 3.13 để gửi email nhắc lịch sau 24 giờ. Thiết kế phương án chuyển đổi khi nâng cấp lên 4.3, so sánh ít nhất hai lựa chọn theo tiêu chí an toàn dữ liệu, khả năng quan sát và độ phức tạp."]}, {"id": "p1c8", "num": 8, "title": "RabbitMQ Streams", "intro": "Queue truyền thống trong RabbitMQ có ngữ nghĩa <b>tiêu thụ phá hủy<\/b> (destructive consume): message được ack là bị xóa. Mô hình này hoàn hảo cho phân phối công việc, nhưng bất lực trước vài nhu cầu rất phổ biến: nhiều nhóm consumer độc lập cùng đọc một luồng sự kiện, đọc lại lịch sử sau khi sửa lỗi, nạp dữ liệu cho một dịch vụ mới từ đầu, hay lưu hàng trăm triệu sự kiện với chi phí thấp. Từ 3.9, RabbitMQ có thêm <b>stream<\/b>: một cấu trúc log chỉ ghi nối (append-only log), bền vững, nhân bản, đọc không phá hủy. Chương này giải thích stream hoạt động thế nào bên trong (segment, chunk, offset), cách dùng qua AMQP 0-9-1 lẫn qua stream protocol riêng, super stream, khử trùng lặp phía producer, lọc bằng Bloom filter, và khi nào chọn stream thay vì queue hay Kafka.", "sections": [{"n": "8.1", "t": "Log append-only và offset", "sub": ["Mô hình tư duy", "Segment và chunk", "Nhân bản"]}, {"n": "8.2", "t": "Retention: lưu giữ bao lâu?", "sub": ["Các tham số", "Retention theo segment"]}, {"n": "8.3", "t": "Dùng stream qua AMQP 0-9-1", "sub": ["Khai báo", "Các quy tắc tiêu thụ", "Chọn điểm bắt đầu: x-stream-offset"]}, {"n": "8.4", "t": "Stream protocol", "sub": ["Vì sao có giao thức riêng?", "Tính năng chỉ có ở stream protocol"]}, {"n": "8.5", "t": "Super stream: phân vùng", "sub": ["Cấu trúc", "Publish và consume"]}, {"n": "8.6", "t": "Khử trùng lặp phía producer", "sub": []}, {"n": "8.7", "t": "Lọc stream bằng Bloom filter", "sub": ["Cơ chế", "Thí nghiệm"]}, {"n": "8.8", "t": "Stream, queue hay Kafka?", "sub": ["Stream so với queue", "RabbitMQ Streams so với Kafka"]}, {"n": "8.9", "t": "Lỗi thường gặp", "sub": []}], "summary": ["Stream là log append-only, bền vững, nhân bản; mỗi message có offset 64-bit; đọc không phá hủy, nhiều consumer đọc chung một bản dữ liệu.", "Dữ liệu nằm trong segment file gồm nhiều chunk; chunk là đơn vị ghi, nhân bản, đọc, có timestamp và Bloom filter.", "Retention theo <code>max-length-bytes<\/code>/<code>max-age<\/code>, đánh giá theo segment; mặc định không giới hạn, phải tự đặt.", "Qua AMQP 0-9-1: bắt buộc prefetch và manual ack (ack là tín dụng), không <code>basic.get<\/code>, không requeue/DLX; chọn điểm bắt đầu bằng <code>x-stream-offset<\/code> (<code>first<\/code>, <code>last<\/code>, <code>next<\/code>, số, timestamp, khoảng thời gian); <code>last<\/code> và timestamp có độ mịn chunk.", "Stream protocol (cổng 5552) cho thông lượng cao và các tính năng riêng: offset tracking phía server, dedup theo producer name + publishing id, single active consumer, super stream đầy đủ.", "Super stream = nhiều stream partition nối bằng exchange direct; kết hợp SAC cho mô hình giống consumer group.", "Bloom filter lọc ở mức chunk, có dương tính giả, consumer vẫn phải lọc lại.", "Queue cho giao việc, stream cho phát sự kiện và đọc lại; Kafka vẫn vượt trội ở compaction, xử lý luồng và hệ sinh thái."], "exercises": ["Tạo stream với <code>x-max-age=1m<\/code> và <code>x-stream-max-segment-size-bytes=100000<\/code>. Ghi liên tục trong 3 phút và theo dõi <code>first_offset<\/code> qua <code>rabbitmq-streams stream_status<\/code>. Giải thích vì sao message cũ không biến mất chính xác sau 60 giây.", "Viết consumer Go đọc stream qua AMQP 0-9-1, lưu offset đã xử lý vào một file (hoặc bảng SQL) sau mỗi 100 message, và tiếp tục đúng chỗ khi khởi động lại. Kiểm tra bằng cách kill consumer giữa chừng.", "Thay đổi prefetch của consumer stream (1, 10, 1000) và đo thông lượng đọc 100 nghìn message. Giải thích vai trò \"tín dụng\" của ack.", "Tạo super stream 4 partition bằng <code>--binding-keys<\/code> theo vùng (<code>north,central,south,intl<\/code>). Publish qua AMQP 0-9-1 với routing key tương ứng và kiểm chứng phân bố bằng <code>stream_status<\/code>.", "Thiết kế thí nghiệm cho thấy Bloom filter tiết kiệm băng thông: hai producer, mỗi producer ghi một vùng với tốc độ cao; so sánh số message consumer có filter nhận được với tổng số message.", "Với một hệ thống đặt hàng cần: (a) gửi email xác nhận đúng một lần, (b) cho đội phân tích đọc lại toàn bộ sự kiện 30 ngày, (c) dựng lại cache khi khởi động. Chọn queue hay stream cho từng nhu cầu và vẽ topology.", "(Nâng cao) Dùng client stream protocol (Phần 2, Chương 8) bật dedup với producer name cố định, gửi 1000 message, kill producer ở message 600, khởi động lại và gửi lại từ đầu. Chứng minh stream chỉ có đúng 1000 message."]}, {"id": "p1c9", "num": 9, "title": "Cluster, High Availability &amp; phân tán", "intro": "Một node RabbitMQ đơn lẻ, dù cấu hình tốt tới đâu, vẫn là điểm lỗi duy nhất: máy chết, đĩa hỏng hay chỉ đơn giản là cần nâng cấp hệ điều hành đều làm gián đoạn dịch vụ. Chương này trình bày cách RabbitMQ chạy thành <b>cluster<\/b> nhiều node, cách quorum queue dùng thuật toán đồng thuận Raft để nhân bản message và tự bầu leader mới khi node chết, những gì thay đổi căn bản trong 4.3 (Khepri là metadata store duy nhất, các chiến lược xử lý phân vùng mạng kiểu cũ bị loại bỏ), cách client kết nối tới cluster, và các công cụ phân tán vượt ra ngoài một cluster: federation, shovel, kiến trúc đa trung tâm dữ liệu. Phần cuối bàn về nâng cấp (rolling, blue-green), feature flag và triển khai trên Kubernetes.", "sections": [{"n": "9.1", "t": "Cluster RabbitMQ là gì", "sub": ["Những gì được chia sẻ, những gì không", "Tên node, Erlang cookie và cổng"]}, {"n": "9.2", "t": "Metadata store: từ Mnesia tới Khepri", "sub": ["Lịch sử", "Hệ quả: ghi metadata cần đa số"]}, {"n": "9.3", "t": "Dựng cluster", "sub": ["Thí nghiệm: ba node trên một máy", "Peer discovery", "Gỡ node khỏi cluster"]}, {"n": "9.4", "t": "Quorum queue: nhân bản bằng Raft", "sub": ["Raft trong năm phút", "Quan sát một quorum queue", "Số node và số lỗi chịu được", "Thí nghiệm: giết leader", "Kiểm tra trước khi dừng node"]}, {"n": "9.5", "t": "Quản lý replica", "sub": ["Các lệnh rabbitmq-queues", "Thí nghiệm grow, shrink, rebalance", "Replica mới và non-voter"]}, {"n": "9.6", "t": "Phân vùng mạng trong 4.3", "sub": ["Thay đổi lớn: không còn chiến lược xử lý phân vùng", "Ba kịch bản"]}, {"n": "9.7", "t": "Client kết nối tới cluster", "sub": ["Kết nối tới node nào?", "Chế độ bảo trì: drain và revive"]}, {"n": "9.8", "t": "Federation và Shovel", "sub": ["Khi nào cần", "Thí nghiệm: exchange federation giữa hai broker", "Thí nghiệm: dynamic shovel và một cái bẫy về vhost"]}, {"n": "9.9", "t": "Kiến trúc đa trung tâm dữ liệu", "sub": []}, {"n": "9.10", "t": "Nâng cấp và feature flag", "sub": ["Feature flag", "Lộ trình phiên bản", "Rolling upgrade và blue-green"]}, {"n": "9.11", "t": "Kubernetes", "sub": []}, {"n": "9.12", "t": "Lỗi thường gặp", "sub": []}], "summary": ["Cluster chia sẻ metadata trên mọi node; nội dung message chỉ được nhân bản với quorum queue và stream. Node xác thực nhau bằng Erlang cookie; cần mở cổng 4369 và 25672.", "RabbitMQ 4.3 dùng Khepri (Raft) làm metadata store duy nhất; Mnesia đã bị loại bỏ. Ghi metadata cần đa số node; thí nghiệm cho thấy khai báo queue timeout sau 30 giây khi chỉ còn 1/3 node.", "Quorum queue là một cụm Raft: leader nhận ghi, commit khi đa số ghi xong, follower bầu leader mới khi leader mất. Thí nghiệm <code>kill -9<\/code> leader: leader mới sau khoảng 240 ms, publish tiếp tục; mất đa số thì không có confirm.", "Cluster N node chịu được <code>floor((N-1)/2)<\/code> node lỗi; dùng 3 hoặc 5 node, tránh 2 node.", "<code>rabbitmq-queues<\/code> (grow, shrink, add_member, delete_member, rebalance, transfer_leadership) và CMR quản lý replica; replica mới vào dạng non-voter cho tới khi bắt kịp.", "Từ 4.3, các chiến lược xử lý phân vùng kiểu Mnesia bị loại bỏ; Raft xử lý theo nguyên tắc đa số.", "Client nên kết nối qua LB hoặc danh sách địa chỉ và luôn có vòng lặp kết nối lại; dùng <code>drain<\/code>/<code>revive<\/code> khi bảo trì.", "Federation và shovel nối các broker độc lập; chú ý URI vhost. Sao chép liên site luôn bất đồng bộ.", "Nâng cấp theo lộ trình chính thức (lên 4.3 phải qua 4.2), bật feature flag ổn định trước; rolling upgrade với drain, hoặc blue-green.", "Trên Kubernetes dùng Cluster Operator và Messaging Topology Operator."], "exercises": ["Dựng cluster 3 node trên một máy theo mục 9.3.1 (cổng riêng cho mỗi node). Khai báo quorum queue, rồi dùng <code>rabbitmqctl stop_app<\/code> (thay vì kill) với node leader. So sánh log bầu cử với trường hợp <code>kill -9<\/code>.", "Viết script bảo trì an toàn cho một node: kiểm tra <code>check_if_node_is_quorum_critical<\/code>, <code>drain<\/code>, dừng node, khởi động lại, chờ <code>await_online_quorum_plus_one<\/code>, <code>revive<\/code>. Script phải dừng lại nếu bất kỳ bước kiểm tra nào thất bại.", "Tạo 9 quorum queue với <code>x-queue-leader-locator=client-local<\/code> và kết nối mọi client tới cùng một node. Quan sát phân bố leader, chạy <code>rebalance quorum<\/code> và so sánh.", "Chứng minh bằng thí nghiệm rằng cluster 2 node không chịu được lỗi: khai báo quorum queue trên cluster 2 node, dừng một node và thử publish có confirm.", "Cấu hình exchange federation hai chiều giữa hai broker độc lập với <code>max-hops=1<\/code>. Publish ở mỗi phía và chứng minh message không chạy vòng. Điều gì xảy ra nếu đặt <code>max-hops=2<\/code>?", "Dùng dynamic shovel để \"rút cạn\" một queue từ cluster cũ sang cluster mới (mô phỏng blue-green), với <code>src-delete-after: queue-length<\/code>. Kiểm tra shovel tự xóa sau khi chuyển xong.", "Thiết kế kiến trúc hai trung tâm dữ liệu cho một hệ thống thanh toán: chọn mẫu ở mục 9.9, mô tả đường đi của message, cách failover, cách chống mất và chống trùng."]}, {"id": "p1c10", "num": 10, "title": "Bảo mật, giám sát &amp; vận hành production", "intro": "Chín chương trước tập trung vào cách RabbitMQ hoạt động và cách dùng nó đúng. Chương cuối của Phần 1 chuyển sang góc nhìn của người vận hành: ai được làm gì trên broker (user, tag, permission, vhost), dữ liệu đi trên mạng có được mã hóa không (TLS), broker tự bảo vệ mình thế nào khi thiếu tài nguyên (memory/disk alarm, giới hạn kết nối), cấu hình ở đâu (<code>rabbitmq.conf<\/code>, <code>advanced.config<\/code>), và quan trọng nhất là <b>làm sao biết hệ thống đang khỏe trước khi người dùng phàn nàn<\/b>: Prometheus, các chỉ số then chốt với ngưỡng cảnh báo, health check, log. Chương khép lại bằng hoạch định năng lực, danh mục sự cố production thường gặp và một checklist trước khi lên production.", "sections": [{"n": "10.1", "t": "User, tag và permission", "sub": ["Mô hình phân quyền", "Thí nghiệm: user tối thiểu quyền", "Tag", "User mặc định guest và đăng nhập ẩn danh"]}, {"n": "10.2", "t": "Vhost và giới hạn tài nguyên theo vhost/user", "sub": []}, {"n": "10.3", "t": "TLS", "sub": ["Cấu hình listener TLS", "Theo dõi hạn chứng chỉ"]}, {"n": "10.4", "t": "Các cơ chế xác thực và authorization backend", "sub": []}, {"n": "10.5", "t": "Giới hạn tài nguyên của node", "sub": ["Memory high watermark", "Disk free limit", "File descriptor, connection, channel và kích thước message"]}, {"n": "10.6", "t": "Flow control và connection.blocked", "sub": []}, {"n": "10.7", "t": "rabbitmq.conf và advanced.config", "sub": ["Các file cấu hình", "Definitions: cấu hình topology như code"]}, {"n": "10.8", "t": "Giám sát", "sub": ["Chiến lược", "Plugin Prometheus", "Chỉ số then chốt và ngưỡng cảnh báo", "Health check"]}, {"n": "10.9", "t": "Logging", "sub": []}, {"n": "10.10", "t": "Hoạch định năng lực", "sub": []}, {"n": "10.11", "t": "Sự cố production thường gặp", "sub": []}, {"n": "10.12", "t": "Checklist production", "sub": []}], "summary": ["Phân quyền gồm xác thực, vhost và ba regex <code>configure<\/code>/<code>write<\/code>/<code>read<\/code>; topic permission kiểm tra routing key; tag chỉ quyết định quyền management.", "4.x bật sẵn cơ chế <code>ANONYMOUS<\/code> đăng nhập thành <code>guest<\/code>; production phải tắt và xóa <code>guest<\/code>.", "Giới hạn theo vhost/user ngăn một ứng dụng lỗi làm cạn tài nguyên chung.", "TLS cấu hình qua <code>listeners.ssl.<i><\/code> và <code>ssl_options.<\/i><\/code>; mutual TLS + <code>EXTERNAL<\/code> cho xác thực bằng chứng chỉ; OAuth 2.0 cho tổ chức có IdP.", "Memory watermark mặc định 0.6 (khuyến nghị 0.4 tới 0.7), disk free limit mặc định chỉ 50 MB (quá thấp cho production); alarm chặn publisher toàn cluster.", "<code>rabbitmq.conf<\/code> cho hầu hết cấu hình, <code>advanced.config<\/code> cho trường hợp đặc biệt, definitions JSON để quản lý topology như code.", "Plugin Prometheus (cổng 15692) với <code>/metrics<\/code>, <code>/metrics/per-object<\/code>, <code>/metrics/detailed<\/code>; theo dõi alarm, tồn đọng, unacked, churn, dead-letter, Raft.", "Health check bằng <code>rabbitmq-diagnostics check_*<\/code> hoặc <code>/api/health/checks/*<\/code>; liveness probe phải nhẹ.", "Hoạch định năng lực bằng ước lượng rồi đo thật; queue ngắn là queue khỏe."], "exercises": ["Tạo ba user cho một hệ thống: <code>order-svc<\/code> (publish sự kiện <code>order.<i><\/code>), <code>inventory-worker<\/code> (chỉ consume queue <code>inventory.<\/i><\/code>), <code>grafana<\/code> (chỉ xem số liệu). Viết lệnh <code>set_permissions<\/code>/<code>set_user_tags<\/code> và chứng minh bằng thử nghiệm rằng mỗi user không làm được việc ngoài phạm vi.", "Đặt <code>max-queues = 5<\/code> cho một vhost thử nghiệm và viết chương trình khai báo queue thứ 6. Ghi lại mã lỗi và thông báo.", "Trên một node thử nghiệm riêng, sinh bộ chứng chỉ tự ký (CA, server, client), bật listener TLS 5671 với <code>verify_peer<\/code> và <code>fail_if_no_peer_cert = true<\/code>, rồi kết nối bằng amqp091-go qua <code>amqps://<\/code> với <code>DialTLS<\/code>.", "Cấu hình Prometheus thu thập cả <code>/metrics<\/code> và <code>/metrics/detailed?family=queue_coarse_metrics<\/code>. Viết truy vấn PromQL hiển thị 5 queue có nhiều message ready nhất.", "Mô phỏng connection churn: viết chương trình mở và đóng connection 50 lần/giây trong 1 phút. Quan sát <code>rabbitmq_connections_opened_total<\/code>, bộ nhớ và log; sau đó viết lại chương trình dùng một connection dài hạn và so sánh.", "Viết script kiểm tra sức khỏe tổng hợp (bash) gọi các lệnh <code>check_*<\/code> và các endpoint <code>/api/health/checks/*<\/code>, trả mã thoát phù hợp để dùng làm readiness probe. Giải thích vì sao bạn không dùng cùng script đó cho liveness probe.", "Lập kế hoạch năng lực cho hệ thống: 2000 message/giây đỉnh, message 4 KB, quorum queue 3 replica, phải chịu được consumer ngừng 3 giờ. Tính dung lượng đĩa tối thiểu mỗi node, đề xuất <code>disk_free_limit<\/code> và <code>vm_memory_high_watermark<\/code>.", "Viết runbook cho cảnh báo <code>RabbitMQResourceAlarm<\/code>: các bước chẩn đoán (lệnh cụ thể), các hành động khắc phục theo thứ tự ưu tiên, và điều kiện để leo thang."]}]}, {"id": 2, "chapters": [{"id": "p2c1", "num": 1, "title": "Bắt đầu với amqp091-go", "intro": "Phần 1 đã trình bày mô hình AMQP 0-9-1 ở mức khái niệm: connection, channel, exchange, queue, binding, ack, prefetch. Từ chương này chúng ta chuyển sang viết mã Go thật. Mục tiêu của chương đầu tiên là nắm vững \"bộ khung\" mà mọi chương sau đều dựa vào: cách kết nối (Dial/DialConfig), vòng đời của Connection và Channel, cách khai báo topology, cách publish và consume, cách đọc lỗi mà broker trả về. Cuối chương bạn sẽ có một cặp producer/consumer \"hello world\" chạy được, dừng êm khi nhận tín hiệu hệ điều hành, và một chương trình tái hiện các lỗi kinh điển kèm thông báo lỗi thật.", "sections": [{"n": "1.1", "t": "Thư viện amqp091-go", "sub": ["Lịch sử và phạm vi", "Cài đặt module", "RabbitMQ cho môi trường phát triển", "Quy ước biến môi trường AMQP_URL"]}, {"n": "1.2", "t": "URI kết nối và Dial/DialConfig", "sub": ["Cấu trúc URI", "Dial và DialConfig", "Kết nối TLS"]}, {"n": "1.3", "t": "Connection và Channel", "sub": ["Vòng đời", "Chia sẻ channel giữa các goroutine", "NotifyClose, NotifyBlocked, IsClosed"]}, {"n": "1.4", "t": "Khai báo topology", "sub": ["QueueDeclare", "ExchangeDeclare và QueueBind", "amqp.Table và kiểu dữ liệu"]}, {"n": "1.5", "t": "Publish với PublishWithContext", "sub": []}, {"n": "1.6", "t": "Consume và amqp.Delivery", "sub": []}, {"n": "1.7", "t": "Hello world chạy thật", "sub": ["Producer", "Consumer", "Chạy và quan sát"]}, {"n": "1.8", "t": "Bảng ánh xạ AMQP method sang amqp091-go", "sub": []}, {"n": "1.9", "t": "Lỗi thường gặp và thông báo lỗi thật", "sub": []}], "summary": ["amqp091-go là thư viện AMQP 0-9-1 chính thức cho Go, API mỏng bám sát các method giao thức; sách dùng v1.16.0. Tính năng tự phục hồi (<code>Config.Recovery<\/code>) còn experimental và tắt theo mặc định.", "Dùng <code>DialConfig<\/code> để đặt tên connection, heartbeat, TLS và timeout kết nối; đọc URI từ cấu hình/biến môi trường, chú ý percent-encode mật khẩu và vhost.", "Connection đắt và sống lâu; channel rẻ nhưng chết vĩnh viễn khi gặp lỗi mức channel. Tách connection publish và consume; mỗi goroutine publish một channel.", "Declare là idempotent nhưng phải tương đương tuyệt đối, nếu không sẽ gặp 406 PRECONDITION_FAILED.", "<code>PublishWithContext<\/code> trả <code>nil<\/code> không có nghĩa là broker đã nhận; context chỉ được kiểm tra trước khi gửi. Muốn chắc chắn phải dùng confirm.", "Luôn <code>Qos<\/code> trước <code>Consume<\/code> vì thư viện có bộ đệm không giới hạn; dùng <code>Cancel<\/code> rồi <code>range<\/code> hết <code>deliveries<\/code> để dừng êm.", "Luôn đăng ký <code>NotifyClose<\/code> (Go channel có buffer) để phát hiện lỗi bất đồng bộ như publish tới exchange không tồn tại."], "exercises": ["Sửa <code>hello-producer<\/code> để nhận nội dung message từ tham số dòng lệnh và số lần gửi qua flag <code>-n<\/code>. Chạy với <code>-n 1000<\/code> và quan sát số message trong queue bằng <code>rabbitmqctl list_queues -p p2a name messages<\/code>.", "Chạy hai bản <code>hello-consumer<\/code> cùng lúc rồi gửi 10 message. Message được chia thế nào? Đổi prefetch thành 1 và so sánh (gợi ý: Chương 2 sẽ phân tích kỹ).", "Viết hàm <code>dialURL(user, pass, host, vhost string) string<\/code> dựng URI bằng <code>amqp.URI{...}.String()<\/code> và kiểm thử với mật khẩu chứa <code>@<\/code> và <code>/<\/code>, vhost chứa <code>/<\/code>.", "Thêm vào <code>hello-consumer<\/code> việc lắng nghe <code>ch.NotifyCancel<\/code>. Trong lúc consumer chạy, xóa queue <code>hello<\/code> bằng <code>rabbitmqctl delete_queue hello -p p2a<\/code> và quan sát consumer nhận được gì. Chương trình nên phản ứng thế nào?", "Đổi <code>autoAck<\/code> thành <code>true<\/code> trong consumer, cho handler <code>time.Sleep(2*time.Second)<\/code> và dừng tiến trình bằng <code>kill -9<\/code> giữa chừng. Đếm số message bị mất và giải thích.", "Viết chương trình đo thời gian của 1000 lần <code>conn.Channel()<\/code> + <code>ch.Close()<\/code> so với 1000 lần <code>amqp.Dial<\/code> + <code>conn.Close()<\/code> để thấy chênh lệch chi phí giữa channel và connection."]}, {"id": "p2c2", "num": 2, "title": "Work queue và worker pool", "intro": "Bài toán phổ biến nhất khi đưa RabbitMQ vào một hệ thống Go là xử lý nền (background job): gửi email, tạo ảnh thu nhỏ, tính toán báo cáo, gọi API bên thứ ba. Các công việc được đẩy vào một queue và nhiều worker cạnh tranh nhau lấy việc (competing consumers). Chương này xây dựng một worker pool hoàn chỉnh: ack thủ công, prefetch hợp lý, xử lý đồng thời bằng goroutine, dừng êm khi deploy, phát hiện khi broker hủy consumer — và đo thật ảnh hưởng của prefetch tới thông lượng. Lý thuyết về ack và prefetch đã được trình bày ở Phần 1, Chương 5; ở đây ta tập trung vào cách hiện thực đúng trong Go.", "sections": [{"n": "2.1", "t": "Mô hình competing consumers", "sub": ["Sơ đồ", "Chọn loại queue"]}, {"n": "2.2", "t": "Producer công việc", "sub": []}, {"n": "2.3", "t": "Worker pool", "sub": ["Các quyết định thiết kế", "Thay thế errgroup", "Graceful shutdown", "Phát hiện consumer bị hủy", "Mã nguồn đầy đủ"]}, {"n": "2.4", "t": "Chạy thử", "sub": ["Hai worker cạnh tranh, prefetch = 1", "Dừng êm giữa chừng", "Nhiều channel và consumer bị broker hủy"]}, {"n": "2.5", "t": "Đo thông lượng theo prefetch", "sub": ["Chương trình đo", "Kết quả đo", "Phân tích"]}, {"n": "2.6", "t": "Lỗi thường gặp", "sub": []}], "summary": ["Work queue dùng mô hình competing consumers: nhiều consumer trên một queue, mỗi message chỉ tới một consumer; nên dùng quorum queue cho dữ liệu quan trọng.", "Luôn ack thủ công sau khi xử lý xong và luôn đặt prefetch; công việc phải chịu được việc giao lại (at-least-once).", "Một channel với k goroutine cùng <code>range deliveries<\/code> là worker pool đơn giản và hiệu quả; nhiều channel cho cô lập lỗi và song song phía broker.", "Dừng êm: hủy consumer, làm nốt việc đang chạy, trả về queue phần buffer chưa bắt đầu, chờ <code>deliveries<\/code> close rồi mới đóng channel/connection.", "Phải phát hiện trường hợp broker hủy consumer, nếu không tiến trình sẽ \"sống mà như chết\".", "Số liệu đo thật cho thấy prefetch 1 chậm hơn nhiều lần so với prefetch vài chục đến vài trăm, và prefetch nhỏ hơn số goroutine sẽ giới hạn mức song song; chọn prefetch khoảng k đến 2k cho pool k goroutine."], "exercises": ["Chạy lại kịch bản 2.4.1 với prefetch 10 cho cả hai worker và 10 task có thời gian chênh lệch lớn (<code>-min 100 -max 3000<\/code>). So sánh tổng thời gian hoàn thành với prefetch 1.", "Thêm flag <code>-drain<\/code> cho worker: khi bật, lúc dừng sẽ xử lý nốt toàn bộ buffer thay vì Nack. Đo thời gian dừng của hai chế độ với prefetch 50.", "Viết lại <code>group<\/code> bằng <code>golang.org/x/sync/errgroup<\/code> (nếu môi trường cho phép tải module) và dùng <code>SetLimit<\/code> để giới hạn tổng số goroutine xử lý trên tất cả channel.", "Sửa <code>bench<\/code> để ack theo lô: ack với <code>multiple=true<\/code> sau mỗi 50 message thay vì từng message. Đo lại kịch bản 1 với prefetch 100 và 1000. Ack theo lô có rủi ro gì khi consumer chết?", "Thêm endpoint HTTP <code>/healthz<\/code> (thư viện chuẩn <code>net/http<\/code>) trả 200 khi mọi consumer còn hoạt động và 503 khi có consumer bị hủy hoặc connection đã đóng (gợi ý: <code>conn.IsClosed()<\/code> và một biến trạng thái cập nhật trong <code>runChannel<\/code>).", "Thêm metric đơn giản: số task đã xử lý, số task đang xử lý, thời gian xử lý trung bình; in ra mỗi 5 giây. Dùng <code>atomic<\/code> hoặc mutex.", "Chạy <code>bench<\/code> với <code>-size 65536<\/code> (64 KB) và so sánh đường cong prefetch với message 256 byte. Giải thích sự khác biệt về thông lượng tính theo MB/s."]}, {"id": "p2c3", "num": 3, "title": "Pub/Sub và định tuyến trong Go", "intro": "Work queue ở Chương 2 giao mỗi message cho đúng một consumer. Mô hình xuất bản/đăng ký (publish/subscribe, pub/sub) thì ngược lại: một sự kiện được nhân bản tới <b>nhiều<\/b> bên quan tâm, mỗi bên có queue riêng. Sức mạnh của RabbitMQ nằm ở tầng định tuyến: exchange và binding quyết định message đi đâu mà publisher không cần biết ai đang nghe. Phần 1, Chương 3 đã giải thích lý thuyết của từng loại exchange; chương này hiện thực chúng bằng Go với một cặp chương trình publisher/subscriber đa năng, xây dựng cách khai báo topology bằng dữ liệu (struct) có thể dùng chung giữa các service, và trả lời câu hỏi quan trọng mà nhiều hệ thống bỏ qua: \"message tôi vừa publish có tới được queue nào không?\".", "sections": [{"n": "3.1", "t": "Bức tranh tổng thể", "sub": []}, {"n": "3.2", "t": "Publisher đa năng có kiểm tra định tuyến", "sub": ["Mã nguồn", "Vì sao cần confirm để đọc return cho đúng"]}, {"n": "3.3", "t": "Subscriber với queue tạm", "sub": ["Mã nguồn", "Queue tạm: exclusive, auto-delete, tên do broker đặt"]}, {"n": "3.4", "t": "Bốn loại exchange chạy thật", "sub": ["Fanout: broadcast log", "Direct: định tuyến theo mức độ", "Topic: định tuyến theo mẫu", "Headers: định tuyến theo thuộc tính"]}, {"n": "3.5", "t": "Khai báo topology bằng code", "sub": ["Vấn đề", "Package topology", "Ai nên khai báo topology?"]}, {"n": "3.6", "t": "Alternate exchange, E2E binding và mandatory", "sub": ["Topology cửa hàng", "Kết quả", "Chọn mandatory hay alternate exchange?"]}, {"n": "3.7", "t": "Lỗi thường gặp", "sub": []}], "summary": ["Pub/sub trong RabbitMQ: mỗi subscriber có queue riêng bind vào exchange; exchange không lưu trữ, không có queue khớp thì message bị bỏ.", "Fanout cho broadcast, direct cho khớp chính xác, topic cho mẫu <code>*<\/code>/<code>#<\/code>, headers cho điều kiện trên nhiều thuộc tính; cả bốn đã chạy thật với cùng một cặp công cụ <code>emit<\/code>/<code>receive<\/code>.", "Queue tạm (<code>\"\"<\/code>, exclusive, auto-delete) hợp với dữ liệu realtime; dữ liệu quan trọng cần queue bền có tên cố định.", "Mô tả topology bằng struct trong package dùng chung và khai báo idempotent theo thứ tự exchange, E2E binding, queue, binding.", "Kiểm tra định tuyến bằng <code>mandatory<\/code> + <code>NotifyReturn<\/code> kết hợp confirm: return luôn tới trước ack, nên sau khi nhận đủ confirm là đọc đủ return. Alternate exchange giữ lại message không định tuyến được và khi đó không có return."], "exercises": ["Chạy <code>receive<\/code> cho exchange <code>events<\/code> với binding <code>#<\/code> và <code><i>.<\/i>.vn<\/code> cùng lúc trên một queue. Một message khớp cả hai binding sẽ được giao mấy lần? Kiểm chứng.", "Viết subscriber cho <code>logs<\/code> dùng queue bền có tên cố định <code>logs.archive<\/code> và ack thủ công. Dừng subscriber, publish 5 message, khởi động lại và so sánh với queue tạm.", "Thêm hàm <code>(t Topology) Validate() error<\/code> kiểm tra trước khi khai báo: mọi binding tham chiếu tới exchange/queue có trong topology, tên không rỗng, không trùng.", "Thay argument <code>alternate-exchange<\/code> trong <code>shop<\/code> bằng policy: <code>rabbitmqctl set_policy -p p2a AE \"^shop\\.events$\" '{\"alternate-exchange\":\"shop.unrouted\"}' --apply-to exchanges<\/code>. Bỏ <code>Args<\/code> khỏi <code>shop.events<\/code> (cần xóa exchange cũ trước) và kiểm chứng hành vi không đổi.", "Mở rộng <code>emit<\/code> để nhận nhiều routing key một lần (<code>-key a,b,c<\/code>) và in ra key nào bị trả về. Kiểm tra lập luận \"return tới trước ack\" với 1000 message xen kẽ key đúng/sai.", "Xây dựng hệ thống thông báo: topic exchange <code>notify<\/code> với key <code>&lt;kênh&gt;.&lt;mức&gt;<\/code> (ví dụ <code>email.high<\/code>, <code>sms.low<\/code>). Viết ba consumer: <code>email.<i><\/code>, <code><\/i>.high<\/code>, <code>#<\/code>, và một publisher sinh ngẫu nhiên 20 thông báo. Đếm số message mỗi consumer nhận và đối chiếu với tính toán bằng tay."]}, {"id": "p2c4", "num": 4, "title": "Publish tin cậy", "intro": "Ở Chương 1 ta đã thấy <code>PublishWithContext<\/code> trả <code>nil<\/code> ngay cả khi exchange không tồn tại. Một lời publish thành công phía client chỉ có nghĩa là các byte đã được ghi vào socket — chúng có thể mất khi mạng đứt, khi broker chết trước khi ghi xuống đĩa, khi không có queue nào khớp, hoặc khi queue đầy. Chương này xây dựng publisher tin cậy từng bước: publisher confirms (đo thật bốn chế độ), <code>mandatory<\/code> và <code>basic.return<\/code>, một kiểu <code>Publisher<\/code> an toàn khi dùng từ nhiều goroutine với giới hạn số message đang bay và retry có backoff, và cuối cùng là transactional outbox với PostgreSQL để giải bài toán \"ghi DB rồi publish\" mà không mất sự kiện. Lý thuyết về các mức đảm bảo và outbox đã có ở Phần 1, Chương 6.", "sections": [{"n": "4.1", "t": "Message có thể mất ở đâu phía publisher", "sub": []}, {"n": "4.2", "t": "Publisher confirms trong amqp091-go", "sub": ["Bật confirm mode", "Bốn chế độ publish", "Kết quả đo"]}, {"n": "4.3", "t": "Publisher tin cậy: confirm, return, cửa sổ, retry", "sub": ["Yêu cầu", "Ghép return với confirm", "Mã nguồn", "Kết quả", "Giải thích các quyết định", "Persistent, durable và quorum"]}, {"n": "4.4", "t": "Transactional outbox với PostgreSQL", "sub": ["Bài toán ghi kép (dual write)", "Schema", "Mã nguồn", "Chạy thật: luồng bình thường", "Chạy thật: relay chết giữa chừng", "Chạy thật: relay chạy liên tục", "Vận hành outbox"]}, {"n": "4.5", "t": "Lỗi thường gặp", "sub": []}], "summary": ["<code>Publish<\/code> trả <code>nil<\/code> không có nghĩa broker đã nhận. Bật confirm mode và chờ ack/nack; dùng <code>DeferredConfirmation<\/code> cho từng message hoặc <code>NotifyPublish<\/code> cho luồng bất đồng bộ.", "Đo thật: confirm đồng bộ từng message chậm hơn 15–20 lần so với theo lô hoặc bất đồng bộ có cửa sổ; chọn chế độ theo yêu cầu về độ trễ và độ phức tạp.", "Ghép return với confirm bằng lập luận \"return luôn tới trước ack\": khi confirm của message đã về, return của nó (nếu có) đã nằm trong buffer.", "Publisher tin cậy cần: cửa sổ giới hạn message đang bay, phân loại lỗi tạm thời/vĩnh viễn, exponential backoff với full jitter, <code>MessageId<\/code> không đổi giữa các lần thử.", "Persistent + durable + quorum + confirm cho độ bền; outbox giải bài toán ghi kép DB và broker bằng một transaction cục bộ cộng relay at-least-once.", "Outbox không loại bỏ trùng lặp; đã tái hiện thật cảnh relay chết sau khi publish và gửi lại cùng <code>message_id<\/code>. Consumer phải idempotent."], "exercises": ["Sửa <code>confirm-modes<\/code> để đo thêm chế độ \"bất đồng bộ\" trên classic queue và với message 16 KB. Ghi lại kết quả ba lần chạy và tính trung bình.", "Trong <code>reliable<\/code>, đổi <code>x-max-length<\/code> thành 1 và consumer chậm thành 300 ms. Với <code>maxAttempts = 8<\/code>, có message nào thất bại hẳn không? Tính tổng thời gian chờ tối đa của chuỗi backoff.", "Viết hàm <code>PublishBatch(ctx, msgs []amqp.Publishing) []error<\/code> cho <code>Publisher<\/code>, publish cả lô rồi chờ từng <code>DeferredConfirmation<\/code>, trả lỗi theo đúng vị trí từng message (kể cả <code>ErrUnroutable<\/code>).", "Chạy hai tiến trình <code>outbox relay<\/code> song song và tạo 200 đơn hàng. Kiểm chứng bằng truy vấn SQL và số message trong queue rằng không sự kiện nào bị gửi hai lần trong điều kiện bình thường (nhờ <code>SKIP LOCKED<\/code>).", "Thay polling bằng <code>LISTEN/NOTIFY<\/code>: tạo trigger <code>AFTER INSERT ON outbox<\/code> gọi <code>pg_notify('outbox', '')<\/code>, dùng <code>pq.NewListener<\/code> để đánh thức relay ngay khi có dòng mới, vẫn giữ polling dài (ví dụ 5 giây) làm lưới an toàn.", "Thêm cột <code>aggregate_id<\/code> (mã đơn hàng) vào outbox và thiết kế cách relay đảm bảo thứ tự sự kiện cho cùng một đơn hàng khi chạy nhiều relay (gợi ý: <code>pg_try_advisory_xact_lock(hashtext(aggregate_id))<\/code> hoặc phân vùng theo hash).", "Viết job dọn dẹp xóa các dòng outbox đã gửi quá N ngày theo từng lô 1000 dòng để không khóa bảng lâu."]}, {"id": "p2c5", "num": 5, "title": "Consume tin cậy và xử lý lỗi", "intro": "Chương 4 đảm bảo message không mất trên đường tới broker. Nửa còn lại của bài toán nằm ở consumer: xử lý lỗi thế nào để không mất message nhưng cũng không kẹt mãi một message hỏng; thử lại bao nhiêu lần, cách nhau bao lâu; làm gì khi cùng một message tới hai lần; làm sao một panic trong handler không làm sập cả worker. Chương này xây dựng lần lượt: bảng quyết định ack/nack/reject, phân loại lỗi tạm thời và vĩnh viễn, retry trễ bằng TTL + dead letter exchange (DLX) có đếm số lần thử qua header <code>x-death<\/code>, parking-lot, phục hồi panic, delivery-limit của quorum queue (kèm một hành vi dễ gây nhầm lẫn đã kiểm chứng trên RabbitMQ 4.3.7), consumer idempotent với PostgreSQL, single active consumer và consumer timeout. Lý thuyết về dead lettering và TTL có ở Phần 1, Chương 5 và Chương 7.", "sections": [{"n": "5.1", "t": "Ack, Nack, Reject: chọn đúng thao tác", "sub": ["Bảng quyết định", "Reject và Nack không tương đương với quorum queue"]}, {"n": "5.2", "t": "Phân loại lỗi", "sub": []}, {"n": "5.3", "t": "Retry trễ bằng TTL + DLX", "sub": ["Topology", "Mã nguồn", "Chạy thật", "Giới hạn của phương án một hàng chờ"]}, {"n": "5.4", "t": "Phục hồi panic trong handler", "sub": []}, {"n": "5.5", "t": "Parking-lot: vận hành", "sub": []}, {"n": "5.6", "t": "Quorum queue và delivery-limit", "sub": []}, {"n": "5.7", "t": "Consumer idempotent với PostgreSQL", "sub": ["Ý tưởng", "Mã nguồn", "Chạy thật: chết sau commit, trước ack", "Những điều cần cân nhắc"]}, {"n": "5.8", "t": "Single active consumer", "sub": []}, {"n": "5.9", "t": "Consumer timeout", "sub": ["Cơ chế", "Kết quả trên RabbitMQ 4.3.7", "Chọn giá trị timeout"]}, {"n": "5.10", "t": "Lỗi thường gặp", "sub": []}], "summary": ["Mọi delivery phải kết thúc bằng đúng một ack/nack/reject; ack chỉ sau khi hiệu ứng đã bền vững.", "Phân loại lỗi tạm thời và vĩnh viễn bằng kiểu lỗi bọc; panic được recover và coi là vĩnh viễn.", "Retry trễ không chặn consumer bằng TTL + DLX: Nack không requeue sang hàng chờ có TTL, hết hạn quay lại queue chính; đếm số lần thử bằng <code>x-death<\/code>, vượt giới hạn thì park (publish có confirm rồi ack).", "Quorum queue có delivery-limit mặc định 20 từ RabbitMQ 4.0; đã kiểm chứng trên 4.3.7 rằng <code>basic.reject<\/code> tăng <code>x-delivery-count<\/code> còn <code>basic.nack<\/code> thì không.", "Consumer idempotent: ghi <code>message_id<\/code> vào <code>processed_messages<\/code> cùng transaction với hiệu ứng nghiệp vụ; demo thật loại bỏ cả trùng do relay outbox lẫn do consumer chết trước ack.", "Single active consumer cho thứ tự với dự phòng nóng; consumer timeout mặc định 30 phút, với quorum queue có thể đặt riêng và broker hủy consumer thay vì đóng channel."], "exercises": ["Thêm vào worker <code>retry<\/code> một metric đếm số message theo từng kết quả (ok, retry, parking, panic) và in mỗi 10 giây.", "Hiện thực backoff tăng dần với ba hàng chờ <code>jobs.wait.1s<\/code>, <code>jobs.wait.5s<\/code>, <code>jobs.wait.30s<\/code>: consumer tự publish (có confirm) bản sao sang hàng chờ phù hợp với header <code>x-retry-count<\/code>, rồi ack bản gốc. So sánh ưu nhược điểm với cách đếm <code>x-death<\/code>.", "Viết lệnh <code>retry replay<\/code> đọc tối đa N message từ <code>jobs.parking<\/code> bằng <code>ch.Get<\/code>, in <code>x-error<\/code>, và publish lại vào exchange <code>jobs<\/code> với routing key <code>x-original-routing-key<\/code> (xóa các header <code>x-death<\/code>, <code>x-error<\/code>, <code>x-attempts<\/code>), ack sau khi có confirm.", "Chạy hai tiến trình <code>idempotent<\/code> song song trên cùng queue có nhiều bản trùng (dùng <code>outbox relay -crash<\/code> nhiều lần để tạo). Kiểm chứng số hóa đơn bằng số đơn hàng. Điều gì đảm bảo hai transaction cùng chèn một <code>message_id<\/code> không cùng thành công?", "Sửa <code>idempotent<\/code> để khi DB không truy cập được (tắt kết nối bằng DSN sai), consumer không reject liên tục mà tạm dừng consume (Cancel), chờ DB hồi phục với backoff, rồi consume lại.", "Đặt <code>x-delivery-limit: 5<\/code> cho <code>jobs.work<\/code> và thử thay <code>Nack(false, false)<\/code> bằng <code>Reject(true)<\/code> cho lỗi tạm thời. Quan sát thời điểm message vào DLX và giải thích vì sao retry ngay lập tức kém hơn retry trễ.", "Kết hợp SAC với consumer timeout: consumer A đang active nhưng treo (không ack). Sau khi timeout, B có được kích hoạt không? Kiểm chứng trên quorum queue với <code>x-consumer-timeout<\/code> nhỏ."]}, {"id": "p2c6", "num": 6, "title": "Kết nối lại &amp; khả năng phục hồi", "intro": "Bốn chương trước đã giả định một điều ngầm: connection tới RabbitMQ luôn sống. Thực tế production không như vậy. Broker được nâng cấp theo kiểu rolling, node bị khởi động lại, load balancer cắt kết nối nhàn rỗi, mạng chập chờn vài giây, quản trị viên đóng connection để bảo trì, hay broker chặn publisher vì sắp hết bộ nhớ. Một service Go chạy hàng tháng chắc chắn sẽ gặp tất cả những tình huống đó. Chương này trả lời câu hỏi: khi connection rớt, chương trình của bạn sẽ tự hồi phục, hay lặng lẽ \"chết lâm sàng\" — tiến trình vẫn chạy, health check vẫn xanh, nhưng không còn consume hay publish được gì?", "sections": [{"n": "6.1", "t": "Điều gì xảy ra khi connection rớt?", "sub": ["Các nguyên nhân thường gặp", "Thí nghiệm: chương trình \"ngây thơ\"", "Mất gì và còn gì sau khi connection rớt"]}, {"n": "6.2", "t": "Môi trường thí nghiệm: một node riêng để restart thoải mái", "sub": []}, {"n": "6.3", "t": "Tự phục hồi có sẵn trong amqp091-go (v1.12.0 trở lên)", "sub": ["Các kiểu dữ liệu chính", "Thí nghiệm với Recovery"]}, {"n": "6.4", "t": "Tự viết lớp phục hồi: package rmq", "sub": ["Thiết kế", "Mã nguồn đầy đủ", "Giải thích từng phần", "Kiểm thử tích hợp với broker thật"]}, {"n": "6.5", "t": "Thí nghiệm thật: producer và consumer vượt qua sự cố", "sub": ["Producer có health check", "Consumer phát hiện trùng lặp và thiếu hụt", "Kịch bản và log thật"]}, {"n": "6.6", "t": "Xử lý connection.blocked", "sub": []}, {"n": "6.7", "t": "Health check và quan sát", "sub": []}, {"n": "6.8", "t": "So sánh: Recovery có sẵn và wrapper tự viết", "sub": []}, {"n": "6.9", "t": "Lỗi thường gặp", "sub": []}], "summary": ["Connection sẽ rớt: restart node, nâng cấp, mạng, load balancer, quản trị viên. Memory/disk alarm không làm rớt mà <i>chặn<\/i> connection publish; lỗi cấp channel chỉ đóng channel.", "Không có xử lý, consumer chết im lặng (kênh <code>Delivery<\/code> bị đóng) và publish trả <code>Exception (504) channel/connection is not open<\/code>.", "Sau khi kết nối lại phải dựng lại: channel, confirm mode, Qos, consumer, queue tạm; delivery tag cũ mất hiệu lực; message chưa ack được giao lại với <code>Redelivered=true<\/code>.", "amqp091-go từ v1.12.0 có tự phục hồi (bật bằng <code>Config.Recovery<\/code>), từ v1.13.0 có khôi phục topology; mặc định tắt, khoảng thử lại cố định, publish trong lúc phục hồi vẫn thất bại.", "Wrapper <code>rmq.Client<\/code>: một goroutine sở hữu vòng đời connection, backoff equal jitter, topology chạy lại mỗi lần kết nối, <code>Publish<\/code> chờ confirm và tự gửi lại (at-least-once, cần <code>MessageId<\/code>), <code>Consume<\/code> tự consume lại và tắt êm bằng <code>Cancel<\/code> + <code>WithoutCancel<\/code>.", "Thí nghiệm thật: qua một lần đóng connection và một lần tắt node 9 giây, 33/33 message tới nơi, không mất message nào; health check trả 503 khi mất kết nối hoặc bị block.", "Tách connection publish và consume; readiness phụ thuộc broker, liveness thì không."], "exercises": ["Chạy lại thí nghiệm 6.1.2 nhưng bật confirm mode cho chương trình \"ngây thơ\". <code>msg-5<\/code> nhận được kết quả gì từ <code>DeferredConfirmation<\/code>?", "Thêm trường <code>URLs []string<\/code> vào <code>rmq.Config<\/code> để kết nối luân phiên tới các node của một cluster (lần thử thứ n dùng <code>URLs[n % len(URLs)]<\/code>). Kiểm tra bằng cách cho URL đầu tiên trỏ tới một cổng không tồn tại.", "Bổ sung cho <code>rmq.Client<\/code> các metric: tổng số lần kết nối lại, gauge trạng thái kết nối, gauge blocked; xuất ra <code>/metrics<\/code> theo định dạng văn bản Prometheus chỉ bằng thư viện chuẩn (gợi ý: xem <code>internal/metrics<\/code> ở Chương 9).", "Viết lại chương trình <code>builtin<\/code> sao cho không mất message nào: khi publish lỗi 504 hoặc confirm thất bại thì chờ trạng thái <code>StateOpen<\/code> (qua <code>NotifyStateChange<\/code>) rồi gửi lại. So sánh độ phức tạp với <code>rmq.Client<\/code>.", "Thí nghiệm <code>docker pause<\/code> (hoặc <code>kill -STOP<\/code> tiến trình beam của node thí nghiệm) trong 40 giây với heartbeat 10 giây. Sau bao lâu client phát hiện mất kết nối? Lặp lại với heartbeat 60 giây và giải thích.", "Viết test tích hợp cho <code>rmq.Client<\/code>: publish 1.000 message trong khi một goroutine khác gọi <code>rabbitmqctl close_all_connections<\/code> mỗi giây (qua <code>os/exec<\/code>), sau đó xác nhận consumer nhận đủ 1.000 <code>MessageId<\/code> khác nhau (cho phép trùng).", "(Nâng cao) Thay channel publish dùng chung có mutex bằng một pool N channel confirm. Đo thông lượng với 1, 4, 16 goroutine publish đồng thời và giải thích kết quả."]}, {"id": "p2c7", "num": 7, "title": "RPC &amp; Request-Reply", "intro": "Phần lớn sách này nói về giao tiếp một chiều: publisher bắn sự kiện rồi quên, consumer xử lý lúc nào tùy nó. Nhưng đôi khi bên gửi cần câu trả lời: \"báo giá cho giỏ hàng này\", \"kiểm tra tồn kho\", \"tạo thumbnail rồi cho tôi URL\". RabbitMQ hỗ trợ mô hình yêu cầu - phản hồi (request-reply), thường gọi là RPC qua broker, bằng hai thuộc tính message có sẵn trong AMQP 0-9-1: <code>reply_to<\/code> và <code>correlation_id<\/code> (xem Phần 1, Chương 2).", "sections": [{"n": "7.1", "t": "Mô hình request-reply qua broker", "sub": []}, {"n": "7.2", "t": "Hai cách nhận phản hồi", "sub": ["Queue phản hồi riêng cho mỗi client", "Direct reply-to: amq.rabbitmq.reply-to", "So sánh"]}, {"n": "7.3", "t": "Server RPC đa luồng", "sub": []}, {"n": "7.4", "t": "Client RPC an toàn cho nhiều goroutine", "sub": []}, {"n": "7.5", "t": "Chạy thật", "sub": ["Bốn tình huống cơ bản", "Khi server không chạy", "Đo độ trễ và thông lượng"]}, {"n": "7.6", "t": "Các tình huống lỗi và cách xử lý", "sub": []}, {"n": "7.7", "t": "Khi nào KHÔNG nên dùng RPC qua broker", "sub": []}, {"n": "7.8", "t": "Lỗi thường gặp", "sub": []}], "summary": ["Request-reply dùng <code>reply_to<\/code> (nơi gửi phản hồi) và <code>correlation_id<\/code> (ghép phản hồi với request); server publish phản hồi qua default exchange và chỉ ack request sau khi đã phản hồi.", "Hai cách nhận phản hồi: queue exclusive server-named cho mỗi client, hoặc direct reply-to <code>amq.rabbitmq.reply-to<\/code> (bắt buộc autoAck, consume trước trên cùng channel). Đừng tạo queue cho mỗi request.", "Client tốt: bảng <code>pending<\/code> có khóa, một goroutine dispatch, timeout bằng <code>context<\/code>, <code>Expiration<\/code> bằng thời gian còn lại, <code>mandatory<\/code> + <code>NotifyReturn<\/code> để phát hiện NO_ROUTE ngay, đếm phản hồi muộn.", "Server tốt: worker pool, prefetch nhỏ, channel phản hồi riêng có khóa, lỗi nghiệp vụ trả về như phản hồi, logic idempotent vì request có thể được giao lại.", "Số liệu thật: khoảng 0,3ms p50 khi gọi tuần tự; direct reply-to nhanh hơn queue riêng khoảng 30% khi tải đồng thời cao.", "Timeout không hủy được công việc phía server. Phần lớn tương tác giữa microservice nên là sự kiện bất đồng bộ; dùng gRPC/HTTP khi cần lời gọi đồng bộ độ trễ thấp."], "exercises": ["Chạy client ở chế độ <code>queue<\/code> và quan sát queue <code>amq.gen-...<\/code> trên Management UI trong lúc chạy và sau khi client thoát. Giải thích vì sao nó biến mất.", "Thêm vào <code>RPCClient<\/code> giới hạn số lời gọi đồng thời (semaphore bằng kênh có bộ đệm). Khi vượt giới hạn, <code>Call<\/code> chờ hoặc trả lỗi theo <code>ctx<\/code>.", "Đặt <code>x-message-ttl=5000<\/code> cho queue <code>rpc.quote<\/code> và thử khai báo lại với server đang chạy (queue đã tồn tại không có tham số này). Lỗi gì xuất hiện? Cách nào đặt TTL cho queue đang tồn tại mà không phải xóa nó? (Gợi ý: policy, Phần 1, Chương 4.)", "Đo lại bảng 7.5.3 với <code>-workers 16<\/code> cho server. Độ trễ p50 ở <code>c=16<\/code> thay đổi thế nào? Giải thích.", "Viết server thứ hai cùng consume <code>rpc.quote<\/code> nhưng chậm hơn (<code>time.Sleep<\/code> 50ms mỗi request). Với prefetch 1 và prefetch 100, phân bố độ trễ p99 của client khác nhau thế nào?", "Kết hợp <code>RPCClient<\/code> với <code>rmq.Client<\/code> của Chương 6 để client RPC tự kết nối lại: khi connection mới được tạo phải consume lại <code>amq.rabbitmq.reply-to<\/code> trước khi gửi request mới, và mọi lời gọi đang chờ trên connection cũ phải nhận lỗi ngay.", "(Nâng cao) Thiết kế lại luồng \"báo giá\" thành bất đồng bộ: client publish command <code>quote.requested<\/code> kèm <code>quote_id<\/code>, server publish sự kiện <code>quote.calculated<\/code>, client nhận qua queue riêng và lưu vào bảng. So sánh độ phức tạp và khả năng chịu lỗi với phiên bản RPC."]}, {"id": "p2c8", "num": 8, "title": "Streams với Go", "intro": "Queue truyền thống (classic, quorum) có một tính chất cốt lõi: message được ack là biến mất. Điều đó hoàn hảo cho phân phối công việc, nhưng bất lực khi bạn cần đọc lại lịch sử (\"xử lý lại toàn bộ sự kiện của tuần trước sau khi sửa bug\"), cần nhiều nhóm consumer độc lập cùng đọc một luồng sự kiện mà không phải nhân bản message ra nhiều queue, hay cần thông lượng rất cao với hàng triệu message. RabbitMQ Streams — nhật ký chỉ ghi thêm (append-only log) có nhân bản, tương tự một partition Kafka — giải quyết các nhu cầu đó. Khái niệm (offset, chunk, segment, retention, super stream) đã được trình bày ở Phần 1, Chương 8; chương này tập trung vào cách dùng từ Go.", "sections": [{"n": "8.1", "t": "Stream qua AMQP 0-9-1 với amqp091-go", "sub": ["Khai báo stream", "Chương trình mẫu: publish, consume từ nhiều điểm, lọc, theo dõi offset", "Publish", "Consume từ các điểm khác nhau: x-stream-offset", "Ba quy tắc bắt buộc khi consume stream qua AMQP", "Lọc stream (stream filtering)", "Tự theo dõi offset (offset tracking) với AMQP"]}, {"n": "8.2", "t": "Giao thức stream với rabbitmq-stream-go-client", "sub": ["Vấn đề phiên bản Go", "Chương trình mẫu", "Khử trùng lặp phía producer", "Lưu offset trên broker", "Super stream"]}, {"n": "8.3", "t": "Chọn AMQP hay giao thức stream?", "sub": []}, {"n": "8.4", "t": "Lỗi thường gặp", "sub": []}], "summary": ["Stream là log append-only, đọc không xóa, mỗi consumer chọn vị trí riêng; phù hợp phát lại sự kiện, nhiều nhóm đọc độc lập, thông lượng cao.", "Qua amqp091-go: <code>QueueDeclare<\/code> với <code>x-queue-type=stream<\/code> và retention (<code>x-max-age<\/code>, <code>x-max-length-bytes<\/code>); consume bắt buộc <code>Qos<\/code> và manual ack; <code>x-stream-offset<\/code> nhận <code>first<\/code>/<code>last<\/code>/<code>next<\/code>/<code>int64<\/code>/<code>time.Time<\/code>/khoảng thời gian; offset đọc từ header <code>x-stream-offset<\/code>.", "Lọc stream (<code>x-stream-filter-value<\/code>, <code>x-stream-filter<\/code>) hoạt động ở mức chunk, luôn phải lọc lại phía client.", "AMQP không lưu offset hộ: tự lưu offset (tốt nhất trong cùng transaction với kết quả) và tiếp tục từ <code>offset + 1<\/code>.", "rabbitmq-stream-go-client: v1.8+ cần Go 1.25; với Go 1.24 dùng v1.7.x hoặc v1.6.3 (sách dùng v1.6.3, đã build và chạy thật). Có khử trùng producer, lưu offset trên broker, super stream, SAC.", "Chọn AMQP cho sự đơn giản và tích hợp; chọn giao thức stream cho thông lượng và tính năng nâng cao."], "exercises": ["Publish 10.000 message vào <code>events.stream<\/code> theo lô 100 message mỗi region (100 <code>eu<\/code>, rồi 100 <code>us<\/code>, ...). Chạy lại <code>consume -filter eu<\/code> và so sánh số message client phải tự bỏ qua với thí nghiệm 8.1.6. Giải thích.", "Sửa lệnh <code>resume<\/code> để lưu offset vào PostgreSQL (<code>database/sql<\/code> + <code>lib/pq<\/code>) trong cùng transaction với việc ghi một bảng <code>events_processed<\/code>. Giết tiến trình giữa chừng bằng <code>kill -9<\/code> và chứng minh không có bản ghi nào bị xử lý hai lần.", "Tạo stream với <code>x-max-length-bytes=1000000<\/code> và <code>x-stream-max-segment-size-bytes=100000<\/code>, publish 50.000 message nhỏ. Kiểm tra offset của <code>first<\/code> trước và sau. Vì sao <code>first<\/code> không còn là 0?", "Viết consumer AMQP đọc từ <code>\"1h\"<\/code> và in ra khoảng cách (theo giây) giữa timestamp của message đầu tiên nhận được và mốc \"bây giờ trừ 1 giờ\". Kết quả có luôn dương không? Vì sao?", "Với <code>sclient<\/code>, viết producer gửi 100.000 message và đo thông lượng; so sánh với <code>amqpstream publish -n 100000<\/code>.", "Chạy hai instance của một super stream consumer có <code>SetSingleActiveConsumer<\/code> cùng tên. Tắt instance đang hoạt động và quan sát partition được chuyển giao cho instance còn lại từ offset nào.", "(Nâng cao) Thiết kế cơ chế \"replay\": một lệnh quản trị cho phép một service đọc lại toàn bộ <code>order.*<\/code> của 7 ngày qua từ stream để dựng lại một read model, trong khi consumer thường vẫn xử lý message mới. Những vấn đề idempotency nào phải giải quyết?"]}, {"id": "p2c9", "num": 9, "title": "Dự án microservice mẫu &amp; thực chiến", "intro": "Chương cuối gom mọi kỹ thuật của Phần 2 vào một hệ thống chạy được từ đầu đến cuối: hệ thống đặt hàng gồm ba service Go giao tiếp qua RabbitMQ. <code>order-service<\/code> nhận đơn qua HTTP API, ghi PostgreSQL và bảng outbox trong cùng một transaction (Chương 4); <code>inventory-worker<\/code> giữ hàng và phát kết quả cũng qua outbox; <code>notification-worker<\/code> gửi email cho khách. Hai worker tiêu thụ với retry qua hàng đợi trễ TTL + DLX, parking-lot, khử trùng lặp bằng bảng <code>processed_messages<\/code> (Chương 5), và tất cả dùng lớp tự kết nối lại <code>rabbitmq.Client<\/code> (Chương 6).", "sections": [{"n": "9.1", "t": "Bài toán và kiến trúc", "sub": []}, {"n": "9.2", "t": "Cấu trúc thư mục", "sub": []}, {"n": "9.3", "t": "Hợp đồng sự kiện và topology", "sub": ["events.go", "topology.go"]}, {"n": "9.4", "t": "Nền móng dùng chung", "sub": ["config.go", "obs.go: log, trace id, metrics", "db.go", "app.go", "rabbitmq/client.go"]}, {"n": "9.5", "t": "order-service: HTTP API và outbox", "sub": ["order.go", "outbox.go", "cmd/order-service/main.go"]}, {"n": "9.6", "t": "Khung worker: retry, parking-lot, idempotency", "sub": []}, {"n": "9.7", "t": "inventory-worker", "sub": ["inventory.go", "cmd/inventory-worker/main.go"]}, {"n": "9.8", "t": "notification-worker", "sub": ["notification.go", "cmd/notification-worker/main.go"]}, {"n": "9.9", "t": "Đóng gói: Dockerfile và docker-compose", "sub": []}, {"n": "9.10", "t": "Chạy thật", "sub": ["Topology được tạo tự động", "Đặt hàng thành công: một trace id xuyên ba service", "Hết hàng: kết quả nghiệp vụ, không phải lỗi", "Kiểm tra đầu vào ở biên HTTP", "Lỗi tạm thời được retry thành công", "Lỗi kéo dài: retry rồi vào parking-lot", "Message độc: DLX đưa thẳng vào parking-lot", "Trùng lặp: phát lại outbox, consumer bỏ qua", "Sự kiện không ai nhận: alternate exchange", "Trạng thái cuối cùng", "Tắt êm"]}, {"n": "9.11", "t": "Kiểm thử tích hợp với broker thật", "sub": []}, {"n": "9.12", "t": "Vận hành parking-lot", "sub": []}, {"n": "9.13", "t": "Hướng phát triển", "sub": []}, {"n": "9.16", "t": "Phụ lục A — Cheat sheet amqp091-go v1.16.0", "sub": ["Connection", "Topology", "Publish", "Consume"]}, {"n": "9.17", "t": "Phụ lục B — Bảng lỗi thường gặp", "sub": []}, {"n": "9.18", "t": "Phụ lục C — Checklist production cho ứng dụng Go", "sub": []}, {"n": "9.19", "t": "Phụ lục D — Lộ trình học tiếp", "sub": []}], "summary": ["Hệ thống ba service, giao tiếp qua topic exchange <code>orders.events<\/code>; mỗi service sở hữu dữ liệu riêng, chỉ biết nhau qua sự kiện.", "Outbox trong cùng transaction với nghiệp vụ + relay publish có confirm (<code>FOR UPDATE SKIP LOCKED<\/code>) loại bỏ dual write; <code>message_id<\/code> ổn định cho phép khử trùng.", "Topology mỗi service: queue chính quorum (delivery-limit, DLX → parking-lot), các hàng đợi trễ TTL dead-letter về queue chính, alternate exchange bắt sự kiện không ai nhận.", "Khung worker phân loại kết quả: thành công → ack; vĩnh viễn/panic → reject → parking-lot; tạm thời → publish bản sao vào bậc retry (có confirm) rồi ack; hết bậc → parking-lot.", "Idempotency bằng <code>INSERT ... ON CONFLICT DO NOTHING<\/code> vào <code>processed_messages<\/code> đầu tiên trong transaction nghiệp vụ; hiệu ứng ngoài DB (email) chỉ đạt at-least-once.", "Chạy thật đã chứng minh: trace id xuyên ba service, retry thành công, retry rồi vào parking-lot, message độc qua DLX, bản trùng bị bỏ qua, alternate exchange, tắt êm; số liệu kho khớp tuyệt đối.", "Hai connection cho mỗi service (publish/consume), readiness probe dựa trên DB và broker, metric theo route pattern, test tích hợp với broker thật."], "exercises": ["Hoàn thiện saga: thêm consumer vào order-service (queue <code>orders.q<\/code> bind <code>stock.*<\/code>) để cập nhật trạng thái đơn thành <code>CONFIRMED<\/code> hoặc <code>REJECTED<\/code>, có khử trùng bằng <code>orders.processed_messages<\/code>. Kiểm tra bằng <code>GET /orders/{id}<\/code>.", "Thêm endpoint <code>POST /orders/{id}/cancel<\/code>: ghi sự kiện <code>order.cancelled<\/code> qua outbox; inventory trả hàng về kho nếu đã giữ. Xử lý trường hợp <code>order.cancelled<\/code> đến trước <code>order.created<\/code> (thứ tự không được đảm bảo giữa hai lần publish khác nhau).", "Viết lệnh <code>cmd/parking-replay<\/code>: đọc từng message trong một parking-lot (<code>basic.get<\/code>), in tóm tắt (<code>message_id<\/code>, <code>x-trace-id<\/code>, <code>x-death<\/code>), hỏi xác nhận, xóa header <code>x-retry-count<\/code> rồi publish lại vào queue chính có confirm trước khi ack.", "Thay vòng thăm dò của relay bằng <code>LISTEN/NOTIFY<\/code> (<code>pq.NewListener<\/code>), giữ thăm dò 5 giây làm lưới an toàn. Đo độ trễ từ lúc HTTP trả 201 tới lúc worker nhận sự kiện, trước và sau.", "Chạy hai instance <code>inventory-worker<\/code> và gửi 200 đơn hàng đồng thời cho cùng một SKU có tồn kho 50. Chứng minh không bán vượt (đúng 50 <code>stock.reserved<\/code>) và giải thích vai trò của <code>FOR UPDATE<\/code>.", "Trong lúc gửi đơn liên tục bằng một vòng <code>curl<\/code>, khởi động lại node RabbitMQ thí nghiệm (Chương 6). Xác nhận không mất đơn nào: số dòng <code>orders.orders<\/code> bằng số <code>order.created<\/code> mà inventory đã xử lý.", "Viết test tích hợp cho <code>outbox.Relay<\/code> với PostgreSQL thật: chèn 1.000 dòng, chạy hai relay song song, xác nhận mỗi <code>message_id<\/code> được publish ít nhất một lần và phần lớn đúng một lần.", "(Nâng cao) Thay <code>obs<\/code> bằng <code>prometheus/client_golang<\/code> và OpenTelemetry trong môi trường có mạng đầy đủ: histogram thời gian xử lý message theo <code>svc<\/code> và <code>result<\/code>, span cho HTTP request, cho relay publish và cho mỗi lần xử lý, nối với nhau qua header <code>traceparent<\/code>."]}]}]</script>
+<script>
+(() => {
+  const PARTS_META = {
+    1: {
+      title: "Nền tảng & Kiến trúc RabbitMQ",
+      file: "RabbitMQ_P1_Nen_tang_Kien_truc.docx · 10 chương · 142 trang",
+      desc: "Message broker, mô hình AMQP 0-9-1, exchange và định tuyến, classic/quorum queue và stream, ack và prefetch, publisher confirm, dead lettering và retry, cluster, bảo mật, giám sát, vận hành.",
+      milestones: [
+        "Chạy RabbitMQ 4.x, mở Management UI, dùng rabbitmqctl / rabbitmq-diagnostics / HTTP API thành thạo",
+        "Vẽ được đường đi của message qua direct, fanout, topic, headers exchange và alternate exchange",
+        "Chọn đúng classic / quorum / stream cho từng bài toán và giải thích vì sao",
+        "Thiết lập độ tin cậy đầu-cuối: confirm + mandatory + durable/quorum + manual ack",
+        "Dựng retry có backoff bằng TTL + DLX, đọc được header x-death, có parking-lot queue",
+        "Tự dựng cluster 3 node, tắt một node và quan sát quorum queue bầu leader mới",
+        "Có dashboard giám sát (Prometheus) và checklist cảnh báo: queue phình, unacked, alarm"
+      ]
+    },
+    2: {
+      title: "Lập trình RabbitMQ với Go",
+      file: "RabbitMQ_P2_Lap_trinh_Go.docx · 9 chương · 205 trang",
+      desc: "amqp091-go: kết nối, worker pool, pub/sub, publisher confirm, outbox, consume tin cậy, retry/DLX, idempotency, tự kết nối lại, RPC, stream, dự án microservice đặt hàng hoàn chỉnh.",
+      milestones: [
+        "Viết producer/consumer Go có graceful shutdown, không chia sẻ channel giữa goroutine",
+        "Worker pool có prefetch hợp lý, đo được thông lượng theo prefetch",
+        "Publisher dùng confirm bất đồng bộ + mandatory/NotifyReturn, có retry backoff",
+        "Outbox với PostgreSQL và consumer idempotent khử message trùng",
+        "Client tự kết nối lại, khai báo lại topology, sống sót khi broker restart",
+        "Chạy dự án ordersys (order-service + 2 worker) và theo dõi một đơn hàng qua retry → parking-lot"
+      ]
+    }
+  };
+
+  const DATA = JSON.parse(document.getElementById("data").textContent);
+  const $ = (s, r = document) => r.querySelector(s);
+  const LS_KEY = "rabbitmq-aio-progress-v1";
+  const LS_UI = "rabbitmq-aio-ui-v1";
+
+  // ---- Danh sách mọi mục có thể đánh dấu (để tính tiến độ) ----
+  const chapterKeys = {};   // chId -> [keys tính vào tiến độ chương (mục nội dung)]
+  const partKeys = { 1: [], 2: [] };
+  DATA.forEach(p => p.chapters.forEach(c => {
+    chapterKeys[c.id] = c.sections.map(s => `${c.id}:s:${s.n}`);
+    partKeys[p.id].push(...chapterKeys[c.id]);
+  }));
+  const allKeys = [].concat(partKeys[1], partKeys[2]);
+
+  // ---- Trạng thái ----
+  let done = {};
+  try { done = JSON.parse(localStorage.getItem(LS_KEY) || "{}") || {}; } catch (e) { done = {}; }
+  let ui = { part: 0, hideDone: false, open: {} };
+  try { Object.assign(ui, JSON.parse(localStorage.getItem(LS_UI) || "{}")); } catch (e) {}
+  const saveUi = () => { try { localStorage.setItem(LS_UI, JSON.stringify(ui)); } catch (e) {} };
+
+  // ---- Đồng bộ với tài khoản qua capability db (nếu có) ----
+  let docRef = null, pendingTimer = null, writing = false, dirty = false;
+  const syncEl = $("#sync");
+  function setSync(state, text) { syncEl.dataset.state = state; syncEl.textContent = text; }
+
+  function persist() {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(done)); } catch (e) {}
+    if (!docRef) return;
+    dirty = true;
+    setSync("saving", "Đang lưu…");
+    clearTimeout(pendingTimer);
+    pendingTimer = setTimeout(flush, 700);
+  }
+  async function flush() {
+    if (!docRef || writing || !dirty) return;
+    writing = true; dirty = false;
+    try {
+      await docRef.set({ done, updatedAt: new Date().toISOString() });
+      setSync("cloud", "Đã lưu vào tài khoản");
+    } catch (e) {
+      setSync("local", "Không lưu được lên tài khoản · đang lưu trên trình duyệt");
+      if (e && e.code === "invalid_argument") docRef = null;
+    } finally {
+      writing = false;
+      if (dirty) flush();
+    }
+  }
+
+  (async () => {
+    if (!window.claude || !window.claude.use) return;
+    try {
+      const [db, user] = await Promise.all([claude.use("db"), claude.use("user")]);
+      if (!db || !user) return;
+      const uid = await user.id();
+      if (!uid) return;
+      docRef = db.doc("data/users/" + uid + "/progress");
+      setSync("saving", "Đang tải tiến độ…");
+      const timer = setTimeout(() => setSync("local", "Chưa kết nối được · đang lưu trên trình duyệt"), 10000);
+      let first = true;
+      docRef.onSnapshot(snap => {
+        if (!snap.metadata.fromCache) clearTimeout(timer);
+        if (dirty || writing || snap.metadata.hasPendingWrites) return;
+        if (snap.exists) {
+          const remote = (snap.data() || {}).done || {};
+          if (first) {
+            // Lần đầu: gộp tiến độ đã lưu trên trình duyệt (nếu có) vào tài khoản.
+            const merged = Object.assign({}, remote, done);
+            const extra = Object.keys(merged).length !== Object.keys(remote).length;
+            done = merged;
+            if (extra) persist();
+          } else {
+            done = Object.assign({}, remote);
+          }
+        } else if (first && Object.keys(done).length) {
+          persist();
+        }
+        if (!snap.metadata.fromCache) first = false;
+        try { localStorage.setItem(LS_KEY, JSON.stringify(done)); } catch (e) {}
+        if (!dirty && !writing) setSync("cloud", "Đồng bộ với tài khoản của bạn");
+        refreshAll();
+      }, () => {
+        clearTimeout(timer);
+        docRef = null;
+        setSync("local", "Lưu trên trình duyệt này");
+      });
+    } catch (e) { /* giữ chế độ trình duyệt */ }
+  })();
+
+  // ---- Tìm kiếm ----
+  const norm = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
+  const strip = h => { const d = document.createElement("div"); d.innerHTML = h; return d.textContent; };
+  DATA.forEach(p => p.chapters.forEach(c => {
+    c._hay = norm([c.title, c.intro || "", ...c.sections.map(s => s.t + " " + s.sub.join(" ")), ...c.summary, ...c.exercises].map(strip).join(" \n "));
+  }));
+  function highlight(html, q) {
+    if (!q) return html;
+    // Đánh dấu trong text node, không chạm vào thẻ.
+    const tpl = document.createElement("template"); tpl.innerHTML = html;
+    const walk = document.createTreeWalker(tpl.content, NodeFilter.SHOW_TEXT);
+    const nodes = []; while (walk.nextNode()) nodes.push(walk.currentNode);
+    nodes.forEach(n => {
+      const t = n.nodeValue, nt = norm(t); let i = nt.indexOf(q); if (i < 0) return;
+      const frag = document.createDocumentFragment(); let last = 0;
+      while (i >= 0) {
+        frag.append(t.slice(last, i));
+        const m = document.createElement("mark"); m.textContent = t.slice(i, i + q.length); frag.append(m);
+        last = i + q.length; i = nt.indexOf(q, last);
+      }
+      frag.append(t.slice(last)); n.replaceWith(frag);
+    });
+    return tpl.innerHTML;
+  }
+
+  // ---- Render ----
+  const main = $("#main"), toc = $("#toc");
+  const chev = '<svg class="chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 8l5 5 5-5"/></svg>';
+  const count = keys => keys.reduce((a, k) => a + (done[k] ? 1 : 0), 0);
+
+  function checkItem(key, labelHtml, extraHtml = "") {
+    return `<li><label class="item"><input type="checkbox" data-key="${key}" ${done[key] ? "checked" : ""}><span>${labelHtml}${extraHtml}</span></label></li>`;
+  }
+
+  function render() {
+    const q = norm($("#q").value.trim());
+    const searching = q.length >= 2;
+    let html = "", tocHtml = "", shown = 0;
+    DATA.forEach(p => {
+      if (ui.part && ui.part !== p.id) return;
+      const meta = PARTS_META[p.id];
+      const chs = p.chapters.filter(c => {
+        if (searching && !c._hay.includes(q)) return false;
+        if (ui.hideDone && !searching) {
+          const ks = chapterKeys[c.id]; if (ks.length && count(ks) === ks.length) return false;
+        }
+        return true;
+      });
+      tocHtml += `<h2>Phần ${p.id}</h2>`;
+      p.chapters.forEach(c => {
+        const ks = chapterKeys[c.id], d = count(ks);
+        tocHtml += `<a href="#${c.id}" data-toc="${c.id}" class="${ks.length && d === ks.length ? "full" : ""}"><span class="n">${String(c.num).padStart(2, "0")}</span><span>${c.title}</span><span class="p">${d}/${ks.length}</span></a>`;
+      });
+      if (!chs.length) return;
+      shown += chs.length;
+      const pk = partKeys[p.id], pd = count(pk);
+      html += `<section class="part" id="part${p.id}">
+        <div class="part-head">
+          <div>
+            <div class="eyebrow">Phần ${p.id}</div>
+            <h2>${meta.title}</h2>
+            <p>${meta.desc}</p>
+            <div class="file">${meta.file}</div>
+          </div>
+          <div class="ring"><b data-ppct="${p.id}">${Math.round(pd / pk.length * 100)}%</b><small data-pcount="${p.id}">${pd} / ${pk.length} mục</small></div>
+        </div>
+        ${searching ? "" : `<div class="milestones"><h3>Mốc thực hành của phần ${p.id}</h3><ul class="checks">${meta.milestones.map((m, i) => checkItem(`m:${p.id}:${i}`, m)).join("")}</ul></div>`}
+        <div class="part-body">`;
+      chs.forEach(c => {
+        const ks = chapterKeys[c.id], d = count(ks);
+        const open = searching || $("#expandAll").checked || !!ui.open[c.id];
+        const st = ks.length && d === ks.length ? "done" : d ? "started" : "";
+        const H = s => searching ? highlight(s, q) : s;
+        html += `<article class="ch ${st} ${open ? "open" : ""}" id="${c.id}" data-ch="${c.id}">
+          <div class="ch-head" role="button" tabindex="0" aria-expanded="${open}" data-toggle="${c.id}">
+            <div class="ch-num">${c.num}</div>
+            <div><h3>${H(c.title)}</h3>${c.intro ? `<p class="intro">${H(c.intro)}</p>` : ""}</div>
+            <div class="ch-meta"><span class="pill" data-cpill="${c.id}">${d}/${ks.length}</span>${chev}</div>
+          </div>
+          <div class="mini"><i data-cbar="${c.id}" style="width:${ks.length ? d / ks.length * 100 : 0}%"></i></div>
+          ${open ? `<div class="ch-body">
+            <div class="col">
+              <h4><span>Kiến thức cốt lõi</span></h4>
+              ${c.summary.length ? `<ul class="sum">${c.summary.map(s => `<li>${H(s)}</li>`).join("")}</ul>` : `<p style="margin:0;color:var(--ink-2)">Chương tra cứu: dùng checklist bên cạnh để đánh dấu những phần đã đọc.</p>`}
+            </div>
+            <div class="col">
+              <h4><span>Checklist khi học</span><button type="button" data-all="${c.id}">${d === ks.length ? "Bỏ chọn hết" : "Đánh dấu hết"}</button></h4>
+              <ul class="checks">${c.sections.map(s => checkItem(`${c.id}:s:${s.n}`, `<span class="sn">${s.n}</span>${H(s.t)}`, s.sub.length ? `<span class="subs">${H(s.sub.join(" · "))}</span>` : "")).join("")}</ul>
+              ${c.exercises.length ? `<details class="ex" ${searching && c.exercises.some(e => norm(strip(e)).includes(q)) ? "open" : ""}><summary>Bài tập (${count(c.exercises.map((_, i) => `${c.id}:e:${i}`))}/${c.exercises.length})</summary><ul class="checks">${c.exercises.map((e, i) => checkItem(`${c.id}:e:${i}`, H(e))).join("")}</ul></details>` : ""}
+            </div>
+          </div>` : ""}
+        </article>`;
+      });
+      html += `</div></section>`;
+    });
+    if (!shown) html = `<div class="empty">Không có chương nào khớp. Thử từ khóa khác, ví dụ “ack”, “topic”, “reconnect”.</div>`;
+    html += `<div class="foot"><span>Dựa trên bộ 2 file Word “RabbitMQ Toàn tập” (RabbitMQ 4.3 · Go 1.24 · amqp091-go 1.16). Mục trong checklist khớp với số mục trong tài liệu.</span><span id="resetBox"><button class="danger" type="button" id="reset">Đặt lại tiến độ</button></span></div>`;
+    main.innerHTML = html;
+    toc.innerHTML = tocHtml;
+    refreshTotals();
+  }
+
+  function refreshTotals() {
+    const d = count(allKeys), t = allKeys.length;
+    $("#ovBar").style.width = (d / t * 100) + "%";
+    $("#ovPct").textContent = `${d} / ${t} mục · ${Math.round(d / t * 100)}%`;
+    [1, 2].forEach(p => {
+      const pk = partKeys[p], pd = count(pk);
+      const a = main.querySelector(`[data-ppct="${p}"]`), b = main.querySelector(`[data-pcount="${p}"]`);
+      if (a) a.textContent = Math.round(pd / pk.length * 100) + "%";
+      if (b) b.textContent = `${pd} / ${pk.length} mục`;
+    });
+  }
+
+  function refreshChapter(id) {
+    const ks = chapterKeys[id], d = count(ks);
+    const art = main.querySelector(`[data-ch="${id}"]`);
+    if (art) {
+      art.classList.toggle("done", ks.length > 0 && d === ks.length);
+      art.classList.toggle("started", d > 0 && d < ks.length);
+      const pill = art.querySelector("[data-cpill]"); if (pill) pill.textContent = `${d}/${ks.length}`;
+      const bar = art.querySelector("[data-cbar]"); if (bar) bar.style.width = (ks.length ? d / ks.length * 100 : 0) + "%";
+      const btn = art.querySelector("[data-all]"); if (btn) btn.textContent = d === ks.length ? "Bỏ chọn hết" : "Đánh dấu hết";
+      const sum = art.querySelector("details.ex summary");
+      if (sum) {
+        const ex = art.querySelectorAll('input[data-key*=":e:"]');
+        const exd = [...ex].filter(i => i.checked).length;
+        sum.textContent = `Bài tập (${exd}/${ex.length})`;
+      }
+    }
+    const t = toc.querySelector(`[data-toc="${id}"]`);
+    if (t) { t.classList.toggle("full", ks.length > 0 && d === ks.length); t.querySelector(".p").textContent = `${d}/${ks.length}`; }
+  }
+
+  function refreshAll() {
+    main.querySelectorAll("input[data-key]").forEach(i => { i.checked = !!done[i.dataset.key]; });
+    Object.keys(chapterKeys).forEach(refreshChapter);
+    refreshTotals();
+  }
+
+  // ---- Sự kiện ----
+  main.addEventListener("change", e => {
+    const i = e.target.closest("input[data-key]"); if (!i) return;
+    if (i.checked) done[i.dataset.key] = true; else delete done[i.dataset.key];
+    const ch = i.dataset.key.split(":")[0];
+    if (chapterKeys[ch]) refreshChapter(ch);
+    refreshTotals(); persist();
+  });
+  main.addEventListener("click", e => {
+    const all = e.target.closest("[data-all]");
+    if (all) {
+      e.stopPropagation();
+      const id = all.dataset.all, ks = chapterKeys[id], full = count(ks) === ks.length;
+      ks.forEach(k => { if (full) delete done[k]; else done[k] = true; });
+      main.querySelectorAll(`[data-ch="${id}"] input[data-key^="${id}:s:"]`).forEach(i => { i.checked = !full; });
+      refreshChapter(id); refreshTotals(); persist();
+      return;
+    }
+    if (e.target.id === "reset") {
+      $("#resetBox").innerHTML = `<span class="confirm">Xóa toàn bộ dấu tích? <button class="danger yes" type="button" id="resetYes">Xóa</button><button class="danger" type="button" id="resetNo">Giữ lại</button></span>`;
+      return;
+    }
+    if (e.target.id === "resetYes") { done = {}; persist(); render(); return; }
+    if (e.target.id === "resetNo") { render(); return; }
+    const head = e.target.closest("[data-toggle]");
+    if (head) toggleChapter(head.dataset.toggle);
+  });
+  main.addEventListener("keydown", e => {
+    const head = e.target.closest("[data-toggle]");
+    if (head && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleChapter(head.dataset.toggle); }
+  });
+  function toggleChapter(id) {
+    ui.open[id] = !ui.open[id]; if (!ui.open[id]) delete ui.open[id];
+    saveUi();
+    const y = main.querySelector(`[data-ch="${id}"]`).getBoundingClientRect().top;
+    render();
+    const el = main.querySelector(`[data-ch="${id}"]`);
+    if (el) window.scrollBy(0, el.getBoundingClientRect().top - y);
+  }
+  toc.addEventListener("click", e => {
+    const a = e.target.closest("a[data-toc]"); if (!a) return;
+    const id = a.dataset.toc;
+    const part = +id.match(/^p(\d)/)[1];
+    if (ui.part && ui.part !== part) setPart(part);
+    if (!ui.open[id]) { ui.open[id] = true; saveUi(); render(); }
+  });
+  document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => setPart(+b.dataset.part)));
+  function setPart(p) {
+    ui.part = p; saveUi();
+    document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.part === p)));
+    render();
+  }
+  let qt; $("#q").addEventListener("input", () => { clearTimeout(qt); qt = setTimeout(render, 150); });
+  $("#hideDone").addEventListener("change", e => { ui.hideDone = e.target.checked; saveUi(); render(); });
+  $("#expandAll").addEventListener("change", render);
+
+  // Khởi tạo
+  $("#hideDone").checked = !!ui.hideDone;
+  document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.part === (ui.part || 0))));
+  const h = location.hash.slice(1);
+  if (/^p[12]c\d+$/.test(h)) { ui.open[h] = true; }
+  else if (!Object.keys(ui.open).length) { ui.open.p1c2 = true; }
+  render();
+  if (/^p[12]c\d+$/.test(h)) { const el = document.getElementById(h); if (el) el.scrollIntoView(); }
+  window.addEventListener("hashchange", () => {
+    const id = location.hash.slice(1);
+    if (/^p[12]c\d+$/.test(id) && !ui.open[id]) { ui.open[id] = true; render(); document.getElementById(id)?.scrollIntoView(); }
+  });
+})();
+</script>
+
+</body>
+</html>
