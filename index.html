@@ -2,42 +2,177 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Sổ tay lập trình</title>
+<meta name="description" content="Bộ sổ tay tiếng Việt: Rust All-in-One, Go & Gin, RabbitMQ Toàn tập — kiến thức cốt lõi, checklist học và tài liệu Word.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,800&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-  :root { --bg:#f7f7f8; --card:#fff; --text:#1f2328; --muted:#656d76; --border:#d0d7de; --accent:#0969da; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#0d1117; --card:#161b22; --text:#e6edf3; --muted:#8d96a0; --border:#30363d; --accent:#4493f8; }
+  :root {
+    --bg: #f2f3f6; --card: #ffffff; --text: #171b24; --muted: #5d6573; --faint: #8a919c;
+    --border: #d9dde4; --chip: #f4f5f8;
+    --rust: #b8461d; --go: #00799c; --mq: #6d3bb0; --kafka: #9a5d00;
+    --f-display: "Bricolage Grotesque", "Be Vietnam Pro", system-ui, sans-serif;
+    --f-body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --f-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
   }
-  * { box-sizing:border-box; }
-  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); }
-  main { max-width:760px; margin:0 auto; padding:48px 16px; }
-  h1 { margin:0 0 8px; font-size:28px; }
-  p.sub { margin:0 0 32px; color:var(--muted); }
-  .grid { display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); }
-  a.card { display:block; padding:20px; background:var(--card); border:1px solid var(--border); border-radius:12px; text-decoration:none; color:inherit; transition:border-color .15s, transform .15s; }
-  a.card:hover { border-color:var(--accent); transform:translateY(-2px); }
-  .tag { display:inline-block; font-size:12px; font-weight:600; padding:2px 8px; border-radius:999px; background:var(--accent); color:#fff; margin-bottom:10px; }
-  .card h2 { margin:0 0 6px; font-size:18px; }
-  .card span { color:var(--muted); font-size:14px; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #11131a; --card: #191c25; --text: #e4e7ee; --muted: #a2a9b5; --faint: #747c88;
+      --border: #2c303c; --chip: #20232e;
+      --rust: #f0814f; --go: #4cc3e6; --mq: #b48cf2; --kafka: #e9b24e;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text); font-family: var(--f-body);
+    font-size: 15px; line-height: 1.6;
+  }
+  main {
+    max-width: 1080px; margin: 0 auto; padding-block: 56px 48px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  header { margin-bottom: 36px; }
+  .eyebrow {
+    font-family: var(--f-mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--faint); font-weight: 600;
+  }
+  h1 {
+    font-family: var(--f-display); font-weight: 800; font-size: clamp(30px, 5vw, 44px);
+    line-height: 1.05; letter-spacing: -.02em; margin: 6px 0 10px; text-wrap: balance;
+  }
+  header p { margin: 0; color: var(--muted); max-width: 62ch; }
+  .grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .card {
+    --accent: var(--rust);
+    display: flex; flex-direction: column; gap: 14px; background: var(--card);
+    border: 1px solid var(--border); border-top: 4px solid var(--accent);
+    border-radius: 12px; padding: 20px 20px 18px; min-width: 0;
+  }
+  .card.go { --accent: var(--go); }
+  .card.mq { --accent: var(--mq); }
+  .card.kafka { --accent: var(--kafka); }
+  .tag {
+    font-family: var(--f-mono); font-size: 12px; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  .card h2 { margin: 2px 0 6px; font-size: 21px; line-height: 1.25; font-weight: 700; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+  .meta { font-family: var(--f-mono); font-size: 12px; color: var(--faint); }
+  .open {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    background: var(--accent); color: #fff; text-decoration: none; font-weight: 600;
+    padding: 9px 14px; border-radius: 8px; font-size: 14px;
+  }
+  @media (prefers-color-scheme: dark) { .open { color: #10121a; } }
+  .open:hover { filter: brightness(1.08); }
+  .files h3 {
+    margin: 0 0 6px; font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--faint); font-weight: 600;
+  }
+  .files ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .files a {
+    display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: baseline;
+    color: var(--text); text-decoration: none; font-size: 14px; padding: 4px 6px; border-radius: 6px;
+  }
+  .files a:hover { background: var(--chip); }
+  .files a span:first-child {
+    font-family: var(--f-mono); font-size: 11px; color: var(--accent); font-weight: 600;
+  }
+  .note { font-size: 13px; color: var(--muted); border-top: 1px dashed var(--border); padding-top: 10px; margin-top: auto; }
+  .note code { font-family: var(--f-mono); font-size: 12px; background: var(--chip); padding: 1px 5px; border-radius: 4px; }
+  a:focus-visible { outline: 2px solid var(--accent, var(--mq)); outline-offset: 2px; }
+  footer { margin-top: 36px; color: var(--faint); font-size: 13px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Sổ tay lập trình</h1>
-  <p class="sub">Chọn một sổ tay để bắt đầu.</p>
+  <header>
+    <div class="eyebrow">Sổ tay tiếng Việt</div>
+    <h1>Sổ tay lập trình</h1>
+    <p>Mỗi sổ tay gồm trang tổng hợp kiến thức cốt lõi và checklist học theo từng chương (tiến độ lưu trên trình duyệt), kèm bộ tài liệu Word chi tiết và dự án mẫu.</p>
+  </header>
+
   <div class="grid">
-    <a class="card" href="r/S%E1%BB%95%20tay%20Rust%20All-in-One.html">
-      <div class="tag">Rust</div>
-      <h2>Sổ tay Rust All-in-One</h2>
-      <span>Nền tảng, CTDL &amp; giải thuật, backend Axum + SQLx</span>
-    </a>
-    <a class="card" href="g/So_tay_hoc_Go_Gin.html">
-      <div class="tag">Go</div>
-      <h2>Sổ tay học Go &amp; Gin</h2>
-      <span>Nền tảng Golang, CTDL &amp; giải thuật, backend Gin</span>
-    </a>
+    <article class="card rust">
+      <div>
+        <div class="tag">Rust</div>
+        <h2>Rust All-in-One</h2>
+        <p>Nền tảng ngôn ngữ, cấu trúc dữ liệu &amp; giải thuật, backend với Axum + SQLx.</p>
+      </div>
+      <div class="meta">3 phần · 53 chương · ~1.045 trang</div>
+      <a class="open" href="r/S%E1%BB%95%20tay%20Rust%20All-in-One.html">Mở sổ tay →</a>
+      <div class="files">
+        <h3>Tài liệu Word</h3>
+        <ul>
+          <li><a href="r/Rust_P1_Nen_tang_ngon_ngu.docx"><span>P1</span><span>Nền tảng ngôn ngữ Rust</span></a></li>
+          <li><a href="r/Rust_P2_CTDL_Giai_thuat.docx"><span>P2</span><span>Cấu trúc dữ liệu &amp; giải thuật</span></a></li>
+          <li><a href="r/Rust_P3_Backend_Axum_SQLx.docx"><span>P3</span><span>Backend với Axum + SQLx</span></a></li>
+        </ul>
+      </div>
+      <div class="note">Dự án mẫu: <code>r/taskapi_du_an_mau/taskapi</code></div>
+    </article>
+
+    <article class="card go">
+      <div>
+        <div class="tag">Go</div>
+        <h2>Học Go &amp; Gin</h2>
+        <p>Nền tảng Golang, cấu trúc dữ liệu &amp; giải thuật, backend với Gin.</p>
+      </div>
+      <div class="meta">3 phần</div>
+      <a class="open" href="g/So_tay_hoc_Go_Gin.html">Mở sổ tay →</a>
+      <div class="files">
+        <h3>Tài liệu Word</h3>
+        <ul>
+          <li><a href="g/Phan1_Golang_Nen_Tang.docx"><span>P1</span><span>Nền tảng Golang</span></a></li>
+          <li><a href="g/Phan2_CTDL_Giai_Thuat_Go.docx"><span>P2</span><span>Cấu trúc dữ liệu &amp; giải thuật</span></a></li>
+          <li><a href="g/Phan3_Backend_Go_Gin.docx"><span>P3</span><span>Backend với Gin</span></a></li>
+        </ul>
+      </div>
+    </article>
+
+    <article class="card mq">
+      <div>
+        <div class="tag">RabbitMQ</div>
+        <h2>RabbitMQ Toàn tập</h2>
+        <p>Nền tảng &amp; kiến trúc RabbitMQ 4.x, lập trình producer/consumer với Go (amqp091-go).</p>
+      </div>
+      <div class="meta">2 phần · 19 chương · 347 trang</div>
+      <a class="open" href="mq/So_tay_RabbitMQ_Toan_tap.html">Mở sổ tay →</a>
+      <div class="files">
+        <h3>Tài liệu Word</h3>
+        <ul>
+          <li><a href="mq/RabbitMQ_P1_Nen_tang_Kien_truc.docx"><span>P1</span><span>Nền tảng &amp; kiến trúc RabbitMQ</span></a></li>
+          <li><a href="mq/RabbitMQ_P2_Lap_trinh_Go.docx"><span>P2</span><span>Lập trình RabbitMQ với Go</span></a></li>
+        </ul>
+      </div>
+      <div class="note">Dự án mẫu: <code>mq/ordersys_du_an_mau/ordersys</code></div>
+    </article>
+
+    <article class="card kafka">
+      <div>
+        <div class="tag">Kafka</div>
+        <h2>Sổ tay học Kafka</h2>
+        <p>Apache Kafka 4.4 (KRaft) từ nền tảng đến production: lập trình với Go (franz-go), kiến trúc hướng sự kiện, vận hành cụm.</p>
+      </div>
+      <div class="meta">3 phần · 40 chương · 280 trang</div>
+      <a class="open" href="k/So_tay_hoc_Kafka.html">Mở sổ tay →</a>
+      <div class="files">
+        <h3>Tài liệu Word</h3>
+        <ul>
+          <li><a href="k/Kafka_P1_Nen_tang.docx"><span>P1</span><span>Kafka nền tảng</span></a></li>
+          <li><a href="k/Kafka_P2_Lap_trinh_Go.docx"><span>P2</span><span>Lập trình Kafka với Go</span></a></li>
+          <li><a href="k/Kafka_P3_Kien_truc_Van_hanh.docx"><span>P3</span><span>Kiến trúc &amp; vận hành Kafka</span></a></li>
+        </ul>
+      </div>
+      <div class="note">Dự án mẫu: <code>k/orders_du_an_mau/ordersys</code></div>
+    </article>
   </div>
+
+  <footer>Nội dung viết bằng tiếng Việt · Cập nhật tháng 11/2026</footer>
 </main>
 </body>
 </html>
