@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: taskapi-config
+  labels:
+    app: taskapi
+data:
+  APP_HOST: "0.0.0.0"
+  APP_PORT: "3000"
+  DATABASE_MAX_CONNECTIONS: "10"
+  JWT_ISSUER: "taskapi"
+  JWT_TTL_MINUTES: "60"
+  CORS_ORIGINS: "https://app.example.com"
+  REQUEST_TIMEOUT_SECS: "15"
+  # Migration do initContainer đảm nhận, container chính không chạy lại.
+  RUN_MIGRATIONS: "false"
+  RUST_LOG: "taskapi=info,tower_http=info,sqlx=warn,info"
+  LOG_FORMAT: "json"

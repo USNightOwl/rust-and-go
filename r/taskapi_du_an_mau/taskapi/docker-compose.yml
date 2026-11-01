@@ -1,0 +1,51 @@
+# Chạy toàn bộ stack khi phát triển:  docker compose up --build
+# Bật thêm Redis (profile tùy chọn):  docker compose --profile cache up
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: taskapi
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d taskapi"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    profiles: ["cache"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    image: taskapi:latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/taskapi
+      # Lấy từ file .env cạnh docker-compose.yml; dừng nếu chưa đặt.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      CORS_ORIGINS: http://localhost:5173
+      RUN_MIGRATIONS: "true"
+      LOG_FORMAT: text
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    # Thời gian chờ sau SIGTERM trước khi SIGKILL (mặc định chỉ 10 giây).
+    stop_grace_period: 30s
+
+volumes:
+  pgdata:

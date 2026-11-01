@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taskapi
+  labels:
+    app: taskapi
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: taskapi
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0 # luôn đủ số pod phục vụ trong lúc cập nhật
+  template:
+    metadata:
+      labels:
+        app: taskapi
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+      initContainers:
+        # Chạy migration trước khi container chính khởi động. Nhiều pod chạy
+        # cùng lúc vẫn an toàn: sqlx giữ pg_advisory_lock trong khi migrate.
+        - name: migrate
+          image: ghcr.io/your-org/taskapi:1.0.0
+          args: ["migrate"]
+          envFrom:
+            - configMapRef:
+                name: taskapi-config
+            - secretRef:
+                name: taskapi-secret
+      containers:
+        - name: taskapi
+          image: ghcr.io/your-org/taskapi:1.0.0
+          args: ["serve"]
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: taskapi-config
+            - secretRef:
+                name: taskapi-secret
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          lifecycle:
+            preStop:
+              # Chờ vài giây để Service/Ingress gỡ pod khỏi danh sách endpoint
+              # TRƯỚC KHI app nhận SIGTERM => không rơi request nào.
+              exec:
+                command: ["sleep", "5"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

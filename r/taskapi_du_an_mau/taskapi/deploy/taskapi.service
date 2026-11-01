@@ -1,0 +1,40 @@
+# /etc/systemd/system/taskapi.service
+[Unit]
+Description=Task Manager API (Rust + Axum)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=taskapi
+Group=taskapi
+WorkingDirectory=/opt/taskapi
+# Biến môi trường (DATABASE_URL, JWT_SECRET...) - file chmod 600, chủ root.
+EnvironmentFile=/etc/taskapi/taskapi.env
+# Chạy migration trước khi khởi động; lỗi migration => không start.
+ExecStartPre=/opt/taskapi/taskapi migrate
+ExecStart=/opt/taskapi/taskapi serve
+Restart=on-failure
+RestartSec=5
+# Graceful shutdown: gửi SIGTERM, chờ tối đa 30 giây rồi mới SIGKILL.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+LimitNOFILE=65536
+
+# Hardening: tiến trình chỉ thấy những gì nó thật sự cần.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target
