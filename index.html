@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sổ tay lập trình</title>
+<style>
+  :root { --bg:#f7f7f8; --card:#fff; --text:#1f2328; --muted:#656d76; --border:#d0d7de; --accent:#0969da; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0d1117; --card:#161b22; --text:#e6edf3; --muted:#8d96a0; --border:#30363d; --accent:#4493f8; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  main { max-width:760px; margin:0 auto; padding:48px 16px; }
+  h1 { margin:0 0 8px; font-size:28px; }
+  p.sub { margin:0 0 32px; color:var(--muted); }
+  .grid { display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); }
+  a.card { display:block; padding:20px; background:var(--card); border:1px solid var(--border); border-radius:12px; text-decoration:none; color:inherit; transition:border-color .15s, transform .15s; }
+  a.card:hover { border-color:var(--accent); transform:translateY(-2px); }
+  .tag { display:inline-block; font-size:12px; font-weight:600; padding:2px 8px; border-radius:999px; background:var(--accent); color:#fff; margin-bottom:10px; }
+  .card h2 { margin:0 0 6px; font-size:18px; }
+  .card span { color:var(--muted); font-size:14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Sổ tay lập trình</h1>
+  <p class="sub">Chọn một sổ tay để bắt đầu.</p>
+  <div class="grid">
+    <a class="card" href="r/S%E1%BB%95%20tay%20Rust%20All-in-One.html">
+      <div class="tag">Rust</div>
+      <h2>Sổ tay Rust All-in-One</h2>
+      <span>Nền tảng, CTDL &amp; giải thuật, backend Axum + SQLx</span>
+    </a>
+    <a class="card" href="g/So_tay_hoc_Go_Gin.html">
+      <div class="tag">Go</div>
+      <h2>Sổ tay học Go &amp; Gin</h2>
+      <span>Nền tảng Golang, CTDL &amp; giải thuật, backend Gin</span>
+    </a>
+  </div>
+</main>
+</body>
+</html>
